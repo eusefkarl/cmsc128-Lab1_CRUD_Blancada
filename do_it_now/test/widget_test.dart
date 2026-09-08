@@ -163,11 +163,18 @@ void main() {
   testWidgets('offers Undo before finalizing deletion', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(home: TaskHomePage(repository: FakeTaskRepository())),
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.delete_outline).first,
+      100,
+      scrollable: find.byType(Scrollable),
+    );
     await tester.tap(find.byIcon(Icons.delete_outline).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete').last);
@@ -222,6 +229,8 @@ void main() {
     await tester.tap(find.text('Sort: Tag'));
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
     final personalOffset = tester.getCenter(find.text('Crud test 2'));
     final schoolOffset = tester.getCenter(find.text('Crud test 1'));
     final othersOffset = tester.getCenter(find.text('Other task'));

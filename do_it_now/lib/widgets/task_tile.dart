@@ -10,62 +10,141 @@ class TaskTile extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
   });
+
   final Task task;
   final ValueChanged<bool?> onChanged;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
-    elevation: 0,
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      leading: Checkbox(value: task.isDone, onChanged: onChanged),
-      title: Text(
-        task.title,
-        style: TextStyle(
-          decoration: task.isDone ? TextDecoration.lineThrough : null,
+  Widget build(BuildContext context) {
+    final priorityColor = _priorityColor(task.priority);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: task.isDone ? const Color(0xFF3D9B63) : priorityColor,
+              width: 6,
+            ),
+          ),
         ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(task.details),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
+        child: ListTile(
+          contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          leading: Checkbox(value: task.isDone, onChanged: onChanged),
+          title: Text(
+            task.title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              decoration: task.isDone ? TextDecoration.lineThrough : null,
+              color: task.isDone ? Colors.black45 : const Color(0xFF123047),
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (task.dueDate != null)
+              if (task.details.isNotEmpty) ...[
+                const SizedBox(height: 3),
                 Text(
-                  'Due ${task.dueDate!.month}/${task.dueDate!.day}/${task.dueDate!.year}',
+                  task.details,
+                  style: TextStyle(
+                    color: task.isDone
+                        ? Colors.black38
+                        : const Color(0xFF426278),
+                  ),
                 ),
-              if (task.dueTime != null) Text(task.dueTime!.format(context)),
-              Text(_label(task.priority)),
-              Text(_label(task.category)),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _Badge(
+                    label: _label(task.priority),
+                    color: priorityColor,
+                    icon: Icons.flag_outlined,
+                  ),
+                  _Badge(
+                    label: _label(task.category),
+                    color: const Color(0xFF287A98),
+                    icon: Icons.sell_outlined,
+                  ),
+                  if (task.dueDate != null)
+                    _Badge(
+                      label: 'Due ${task.dueDate!.month}/${task.dueDate!.day}',
+                      color: const Color(0xFF5B6F7B),
+                      icon: Icons.calendar_today_outlined,
+                    ),
+                  if (task.dueTime != null)
+                    _Badge(
+                      label: task.dueTime!.format(context),
+                      color: const Color(0xFF5B6F7B),
+                      icon: Icons.schedule_outlined,
+                    ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit task',
+          trailing: Wrap(
+            children: [
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Edit task',
+              ),
+              IconButton(
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete task',
+              ),
+            ],
           ),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete task',
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
+
+  Color _priorityColor(TaskPriority priority) => switch (priority) {
+    TaskPriority.high => const Color(0xFFD64545),
+    TaskPriority.medium => const Color(0xFFD99A21),
+    TaskPriority.low => const Color(0xFF3D9B63),
+  };
 
   String _label(Enum value) =>
       value.name[0].toUpperCase() + value.name.substring(1);
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.color, required this.icon});
+
+  final String label;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withValues(alpha: 0.45)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    ),
+  );
 }

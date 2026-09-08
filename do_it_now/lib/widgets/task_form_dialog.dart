@@ -76,19 +76,33 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.task != null;
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 24, 16),
       title: Text(isEditing ? 'Edit task' : 'New task'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _titleController,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+              ),
             ),
+            const SizedBox(height: 10),
             TextField(
               controller: _detailsController,
-              decoration: const InputDecoration(labelText: 'Details'),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Details',
+                alignLabelWithHint: true,
+                contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -100,6 +114,10 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                     label: Text(
                       _dueDate == null ? 'Due date' : _formatDate(_dueDate!),
                     ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -108,12 +126,18 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                     onPressed: _selectDueTime,
                     icon: const Icon(Icons.schedule_outlined),
                     label: Text(_dueTime?.format(context) ?? 'Due time'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<TaskPriority>(
               initialValue: _priority,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Priority'),
               items: TaskPriority.values
                   .map(
@@ -130,8 +154,10 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                 if (value != null) setState(() => _priority = value);
               },
             ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<TaskCategory>(
               initialValue: _category,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Category'),
               items: TaskCategory.values
                   .map(

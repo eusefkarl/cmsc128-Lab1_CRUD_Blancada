@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'dart:async';
 
+import 'package:google_fonts/google_fonts.dart';
+
 import '../models/task.dart';
 import '../services/task_repository.dart';
 import '../widgets/empty_state.dart';
@@ -175,7 +177,14 @@ class _TaskHomePageState extends State<TaskHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Task Desk'),
+        title: Text(
+          'DO IT NOW!',
+          style: GoogleFonts.exo2(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         actions: [
           IconButton(
             onPressed: () => _openTaskForm(),
@@ -189,6 +198,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
         onPressed: () => _openTaskForm(),
         icon: const Icon(Icons.add),
         label: const Text('New task'),
+        backgroundColor: const Color(0xFF176B87),
+        foregroundColor: Colors.white,
       ),
       body: StreamBuilder<List<Task>>(
         stream: _repository.watchTasks(),
@@ -209,18 +220,74 @@ class _TaskHomePageState extends State<TaskHomePage> {
               )
               .toList();
           final completedCount = allTasks.where((task) => task.isDone).length;
+          final completionRatio = allTasks.isEmpty
+              ? 0.0
+              : completedCount / allTasks.length;
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
             children: [
-              Text(
-                'Your workspace',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Keep the next step visible and moving.',
-                style: Theme.of(context).textTheme.bodyLarge
-                    ?.copyWith(color: Colors.black54),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF176B87),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF5CC3DD)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x335A9FB4),
+                      blurRadius: 14,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'MISSION CONTROL',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: const Color(0xFFA8E7F4),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Task Desk',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Keep the next step visible and moving.',
+                      style: TextStyle(color: Color(0xFFD7F6FC)),
+                    ),
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: completionRatio,
+                        minHeight: 8,
+                        backgroundColor: const Color(0x556BC5D8),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFA8E7F4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${(completionRatio * 100).round()}% complete',
+                      style: const TextStyle(
+                        color: Color(0xFFD7F6FC),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
               Row(
@@ -240,61 +307,78 @@ class _TaskHomePageState extends State<TaskHomePage> {
                 spacing: 12,
                 runSpacing: 8,
                 children: [
-                  DropdownButton<TaskSortOption>(
-                    value: _sortOption,
-                    onChanged: (value) {
-                      if (value != null) setState(() => _sortOption = value);
-                    },
-                    items: TaskSortOption.values
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text('Sort: ${_label(value)}'),
+                  _controlShell(
+                    icon: Icons.sort,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<TaskSortOption>(
+                        value: _sortOption,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _sortOption = value);
+                          }
+                        },
+                        items: TaskSortOption.values
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text('Sort: ${_label(value)}'),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  _controlShell(
+                    icon: Icons.sell_outlined,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _categoryFilter?.name ?? 'all',
+                        onChanged: (value) => setState(
+                          () =>
+                              _categoryFilter = value == null || value == 'all'
+                              ? null
+                              : TaskCategory.values.byName(value),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All tags'),
                           ),
-                        )
-                        .toList(),
-                  ),
-                  DropdownButton<String>(
-                    value: _categoryFilter?.name ?? 'all',
-                    hint: const Text('Tag'),
-                    onChanged: (value) => setState(
-                      () => _categoryFilter = value == null || value == 'all'
-                          ? null
-                          : TaskCategory.values.byName(value),
+                          ...TaskCategory.values.map(
+                            (value) => DropdownMenuItem(
+                              value: value.name,
+                              child: Text(_label(value)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All tags'),
-                      ),
-                      ...TaskCategory.values.map(
-                        (value) => DropdownMenuItem(
-                          value: value.name,
-                          child: Text(_label(value)),
-                        ),
-                      ),
-                    ],
                   ),
-                  DropdownButton<String>(
-                    value: _priorityFilter?.name ?? 'all',
-                    hint: const Text('Priority'),
-                    onChanged: (value) => setState(
-                      () => _priorityFilter = value == null || value == 'all'
-                          ? null
-                          : TaskPriority.values.byName(value),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All priorities'),
-                      ),
-                      ...TaskPriority.values.map(
-                        (value) => DropdownMenuItem(
-                          value: value.name,
-                          child: Text(_label(value)),
+                  _controlShell(
+                    icon: Icons.flag_outlined,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _priorityFilter?.name ?? 'all',
+                        onChanged: (value) => setState(
+                          () =>
+                              _priorityFilter = value == null || value == 'all'
+                              ? null
+                              : TaskPriority.values.byName(value),
                         ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All priorities'),
+                          ),
+                          ...TaskPriority.values.map(
+                            (value) => DropdownMenuItem(
+                              value: value.name,
+                              child: Text(_label(value)),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -323,4 +407,22 @@ class _TaskHomePageState extends State<TaskHomePage> {
       ),
     );
   }
+
+  Widget _controlShell({required IconData icon, required Widget child}) =>
+      Container(
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF9CCEDC)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: const Color(0xFF176B87)),
+            const SizedBox(width: 6),
+            child,
+          ],
+        ),
+      );
 }
