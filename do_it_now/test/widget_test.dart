@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:do_it_now/main.dart';
+import 'package:do_it_now/screens/task_home_page.dart';
 
 void main() {
   testWidgets('creates and deletes a task', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const MaterialApp(home: TaskHomePage()),
+    );
 
     expect(find.text('Task Desk'), findsOneWidget);
     expect(find.text('Map the first user flow'), findsOneWidget);
