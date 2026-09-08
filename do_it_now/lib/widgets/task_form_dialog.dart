@@ -77,77 +77,79 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
     final isEditing = widget.task != null;
     return AlertDialog(
       title: Text(isEditing ? 'Edit task' : 'New task'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _titleController,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Title'),
-          ),
-          TextField(
-            controller: _detailsController,
-            decoration: const InputDecoration(labelText: 'Details'),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _selectDueDate,
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text(
-                    _dueDate == null ? 'Due date' : _formatDate(_dueDate!),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _selectDueTime,
-                  icon: const Icon(Icons.schedule_outlined),
-                  label: Text(_dueTime?.format(context) ?? 'Due time'),
-                ),
-              ),
-            ],
-          ),
-          DropdownButtonFormField<TaskPriority>(
-            initialValue: _priority,
-            decoration: const InputDecoration(labelText: 'Priority'),
-            items: TaskPriority.values
-                .map(
-                  (priority) => DropdownMenuItem(
-                    value: priority,
-                    child: Text(
-                      priority.name[0].toUpperCase() +
-                          priority.name.substring(1),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            TextField(
+              controller: _detailsController,
+              decoration: const InputDecoration(labelText: 'Details'),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _selectDueDate,
+                    icon: const Icon(Icons.calendar_today_outlined),
+                    label: Text(
+                      _dueDate == null ? 'Due date' : _formatDate(_dueDate!),
                     ),
                   ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) setState(() => _priority = value);
-            },
-          ),
-          DropdownButtonFormField<TaskCategory>(
-            initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Category'),
-            items: TaskCategory.values
-                .map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(
-                      category.name[0].toUpperCase() +
-                          category.name.substring(1),
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _selectDueTime,
+                    icon: const Icon(Icons.schedule_outlined),
+                    label: Text(_dueTime?.format(context) ?? 'Due time'),
                   ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) setState(() => _category = value);
-            },
-          ),
-        ],
+                ),
+              ],
+            ),
+            DropdownButtonFormField<TaskPriority>(
+              initialValue: _priority,
+              decoration: const InputDecoration(labelText: 'Priority'),
+              items: TaskPriority.values
+                  .map(
+                    (priority) => DropdownMenuItem(
+                      value: priority,
+                      child: Text(
+                        priority.name[0].toUpperCase() +
+                            priority.name.substring(1),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _priority = value);
+              },
+            ),
+            DropdownButtonFormField<TaskCategory>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: TaskCategory.values
+                  .map(
+                    (category) => DropdownMenuItem(
+                      value: category,
+                      child: Text(
+                        category.name[0].toUpperCase() +
+                            category.name.substring(1),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _category = value);
+              },
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(

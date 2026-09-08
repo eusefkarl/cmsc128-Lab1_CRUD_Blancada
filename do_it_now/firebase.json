@@ -1,1 +1,1 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"doitnow-c26f9","configurations":{"macos":"1:350109597967:ios:c166c02f64fc0a4a7dbe7a","web":"1:350109597967:web:4b3545de98d13ed07dbe7a","windows":"1:350109597967:web:82dbfafef506ef5d7dbe7a"}}}}}}
+{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"doitnow-c26f9","configurations":{"macos":"1:350109597967:ios:c166c02f64fc0a4a7dbe7a","web":"1:350109597967:web:4b3545de98d13ed07dbe7a","windows":"1:350109597967:web:82dbfafef506ef5d7dbe7a"}}}}},"firestore":{"rules":"firestore.rules"}}
