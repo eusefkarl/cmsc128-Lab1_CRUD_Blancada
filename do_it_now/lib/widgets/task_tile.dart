@@ -26,7 +26,7 @@ class TaskTile extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: task.isDone ? const Color(0xFF3D9B63) : priorityColor,
+              color: task.isDone ? const Color(0xFF00E5FF) : priorityColor,
               width: 6,
             ),
           ),
@@ -39,7 +39,9 @@ class TaskTile extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
               decoration: task.isDone ? TextDecoration.lineThrough : null,
-              color: task.isDone ? Colors.black45 : const Color(0xFF123047),
+              color: task.isDone
+                  ? const Color(0xFF5C7580)
+                  : const Color(0xFFF0F6F8),
             ),
           ),
           subtitle: Column(
@@ -49,11 +51,7 @@ class TaskTile extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   task.details,
-                  style: TextStyle(
-                    color: task.isDone
-                        ? Colors.black38
-                        : const Color(0xFF426278),
-                  ),
+                  style: TextStyle(color: const Color(0xFF5C7580)),
                 ),
               ],
               const SizedBox(height: 8),
@@ -68,7 +66,7 @@ class TaskTile extends StatelessWidget {
                   ),
                   _Badge(
                     label: _label(task.category),
-                    color: const Color(0xFF287A98),
+                    color: const Color(0xFF3D6B8A),
                     icon: Icons.sell_outlined,
                   ),
                   if (task.dueDate != null)
@@ -107,9 +105,9 @@ class TaskTile extends StatelessWidget {
   }
 
   Color _priorityColor(TaskPriority priority) => switch (priority) {
-    TaskPriority.high => const Color(0xFFD64545),
-    TaskPriority.medium => const Color(0xFFD99A21),
-    TaskPriority.low => const Color(0xFF3D9B63),
+    TaskPriority.high => const Color(0xFFFF2D55),
+    TaskPriority.medium => const Color(0xFFFFB100),
+    TaskPriority.low => const Color(0xFF39FF8F),
   };
 
   String _label(Enum value) =>
@@ -127,9 +125,9 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
+      color: const Color(0xFF1C2B3A),
       borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color.withValues(alpha: 0.45)),
+      border: Border.all(color: color),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,

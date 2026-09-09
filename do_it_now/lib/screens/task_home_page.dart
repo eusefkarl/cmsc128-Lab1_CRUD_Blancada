@@ -180,7 +180,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
         title: Text(
           'DO IT NOW!',
           style: GoogleFonts.exo2(
-            color: Colors.white,
+            color: const Color(0xFFF0F6F8),
             fontSize: 22,
             fontWeight: FontWeight.w800,
           ),
@@ -198,8 +198,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
         onPressed: () => _openTaskForm(),
         icon: const Icon(Icons.add),
         label: const Text('New task'),
-        backgroundColor: const Color(0xFF176B87),
-        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xFF7D2DFF),
+        foregroundColor: const Color(0xFFF3E8FF),
       ),
       body: StreamBuilder<List<Task>>(
         stream: _repository.watchTasks(),
@@ -229,9 +229,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF176B87),
+                  color: const Color(0xFF0E1620),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF5CC3DD)),
+                  border: Border.all(color: const Color(0xFF00E5FF)),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x335A9FB4),
@@ -246,24 +246,24 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     Text(
                       'MISSION CONTROL',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFFA8E7F4),
+                        color: const Color(0xFFBFE6F5),
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.4,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Task Desk',
+                      'Your current progress:',
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
-                            color: Colors.white,
+                            color: const Color(0xFFF0F6F8),
                             fontWeight: FontWeight.w800,
                           ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Keep the next step visible and moving.',
-                      style: TextStyle(color: Color(0xFFD7F6FC)),
+                      'Complete tasks to level up.',
+                      style: TextStyle(color: Color(0xFF5C7580)),
                     ),
                     const SizedBox(height: 16),
                     ClipRRect(
@@ -271,9 +271,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
                       child: LinearProgressIndicator(
                         value: completionRatio,
                         minHeight: 8,
-                        backgroundColor: const Color(0x556BC5D8),
+                        backgroundColor: const Color(0xFF1C2B3A),
                         valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFFA8E7F4),
+                          Color(0xFF00E5FF),
                         ),
                       ),
                     ),
@@ -281,7 +281,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     Text(
                       '${(completionRatio * 100).round()}% complete',
                       style: const TextStyle(
-                        color: Color(0xFFD7F6FC),
+                        color: Color(0xFF5C7580),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -312,6 +312,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<TaskSortOption>(
                         value: _sortOption,
+                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
+                        dropdownColor: const Color(0xFF0E1620),
+                        iconEnabledColor: const Color(0xFF5C7580),
                         onChanged: (value) {
                           if (value != null) {
                             setState(() => _sortOption = value);
@@ -333,6 +336,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _categoryFilter?.name ?? 'all',
+                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
+                        dropdownColor: const Color(0xFF0E1620),
+                        iconEnabledColor: const Color(0xFF5C7580),
                         onChanged: (value) => setState(
                           () =>
                               _categoryFilter = value == null || value == 'all'
@@ -359,6 +365,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _priorityFilter?.name ?? 'all',
+                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
+                        dropdownColor: const Color(0xFF0E1620),
+                        iconEnabledColor: const Color(0xFF5C7580),
                         onChanged: (value) => setState(
                           () =>
                               _priorityFilter = value == null || value == 'all'
@@ -412,14 +421,14 @@ class _TaskHomePageState extends State<TaskHomePage> {
       Container(
         padding: const EdgeInsets.only(left: 10, right: 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF131E2B),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF9CCEDC)),
+          border: Border.all(color: const Color(0xFF3D6B8A)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: const Color(0xFF176B87)),
+            Icon(icon, size: 18, color: const Color(0xFF00E5FF)),
             const SizedBox(width: 6),
             child,
           ],

@@ -9,16 +9,18 @@ class EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 60),
       child: Column(
         children: [
-          Icon(
-            Icons.inbox_outlined,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          const Icon(Icons.inbox_outlined, size: 48, color: Color(0xFF00E5FF)),
           const SizedBox(height: 12),
-          const Text('No tasks yet'),
+          const Text(
+            'No tasks yet',
+            style: TextStyle(
+              color: Color(0xFFF0F6F8),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const Text(
             'Create one to get started.',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: Color(0xFF5C7580)),
           ),
         ],
       ),

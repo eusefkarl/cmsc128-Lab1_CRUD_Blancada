@@ -80,7 +80,13 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 24, 16),
-      title: Text(isEditing ? 'Edit task' : 'New task'),
+      title: Text(
+        isEditing ? 'Edit task' : 'New task',
+        style: const TextStyle(
+          color: Color(0xFFF0F6F8),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -89,6 +95,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
             TextField(
               controller: _titleController,
               autofocus: true,
+              style: const TextStyle(color: Color(0xFFF0F6F8)),
               decoration: const InputDecoration(
                 labelText: 'Title',
                 contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -98,6 +105,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
             TextField(
               controller: _detailsController,
               maxLines: 2,
+              style: const TextStyle(color: Color(0xFFF0F6F8)),
               decoration: const InputDecoration(
                 labelText: 'Details',
                 alignLabelWithHint: true,
@@ -138,6 +146,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
             DropdownButtonFormField<TaskPriority>(
               initialValue: _priority,
               isExpanded: true,
+              style: const TextStyle(color: Color(0xFFF0F6F8)),
               decoration: const InputDecoration(labelText: 'Priority'),
               items: TaskPriority.values
                   .map(
@@ -158,6 +167,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
             DropdownButtonFormField<TaskCategory>(
               initialValue: _category,
               isExpanded: true,
+              style: const TextStyle(color: Color(0xFFF0F6F8)),
               decoration: const InputDecoration(labelText: 'Category'),
               items: TaskCategory.values
                   .map(
