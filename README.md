@@ -138,19 +138,19 @@ Add the application screenshots to a `screenshots/` folder in the project root a
 
 ### Main Task Dashboard
 
-![Main task dashboard](doitnow/screenshots/task-dashboard.png)
+![Main task dashboard](do_it_now/screenshots/task-dashboard.png)
 
 ### Create or Edit Task
 
-![Create or edit task dialog](doitnow/screenshots/task-form.png)
+![Create or edit task dialog](do_it_now/screenshots/task-form.png)
 
 ### Task Priority and Category States
 
-![Task priority and category states](doitnow/screenshots/task-priority-category.png)
+![Task priority and category states](do_it_now/screenshots/task-priority-category.png)
 
 ### Sorting and Filtering
 
-![Task sorting and filtering controls](doitnow/screenshots/task-filters.png)
+![Task sorting and filtering controls](do_it_now/screenshots/task-filters.png)
 
 ## Testing
 
