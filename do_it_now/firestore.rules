@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /tasks/{taskId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+
+      function validTask(data) {
+        return data.keys().hasOnly([
+          'ownerId',
+          'title',
+          'details',
+          'createdAt',
+          'dueDate',
+          'dueTime',
+          'priority',
+          'category',
+          'isDone'
+        ])
+        && data.ownerId is string
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 200
+        && data.details is string
+        && data.details.size() <= 2000
+        && data.createdAt is timestamp
+        && (!('dueDate' in data)
+            || data.dueDate == null
+            || data.dueDate is timestamp)
+        && (!('dueTime' in data)
+            || data.dueTime == null
+            || data.dueTime is int)
+        && data.priority in ['low', 'medium', 'high']
+        && data.category in ['school', 'personal', 'others']
+        && data.isDone is bool;
+      }
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && validTask(request.resource.data);
+
+      allow read: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && validTask(request.resource.data);
+
+      allow delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
