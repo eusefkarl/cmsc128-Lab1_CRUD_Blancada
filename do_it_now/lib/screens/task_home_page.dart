@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'dart:async';
 
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +12,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/stat.dart';
 import '../widgets/task_form_dialog.dart';
 import '../widgets/task_tile.dart';
+import 'profile_screen.dart';
 
 enum TaskSortOption { dateAdded, dueDate, priority, tag }
 
@@ -173,6 +176,15 @@ class _TaskHomePageState extends State<TaskHomePage> {
   String _label(Enum value) =>
       value.name[0].toUpperCase() + value.name.substring(1);
 
+  String _userInitial() {
+    try {
+      final name = FirebaseAuth.instance.currentUser?.displayName;
+      return (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+    } on FirebaseException {
+      return '?';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,6 +198,17 @@ class _TaskHomePageState extends State<TaskHomePage> {
           ),
         ),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            icon: CircleAvatar(
+              radius: 14,
+              child: Text(_userInitial(), style: const TextStyle(fontSize: 12)),
+            ),
+            tooltip: 'Profile',
+          ),
           IconButton(
             onPressed: () => _openTaskForm(),
             icon: const Icon(Icons.add_task),

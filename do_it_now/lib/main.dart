@@ -4,14 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
+import 'screens/auth_screen.dart';
 import 'screens/task_home_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  if (FirebaseAuth.instance.currentUser == null) {
-    await FirebaseAuth.instance.signInAnonymously();
-  }
   runApp(const MyApp());
 }
 
@@ -24,7 +22,10 @@ class MyApp extends StatelessWidget {
       title: 'DO IT NOW!',
       theme: ThemeData(
         fontFamily: 'Exo 2',
-        textTheme: GoogleFonts.exo2TextTheme(ThemeData.light().textTheme),
+        textTheme: GoogleFonts.exo2TextTheme(ThemeData.dark().textTheme).apply(
+          bodyColor: const Color(0xFFF0F6F8),
+          displayColor: const Color(0xFFF0F6F8),
+        ),
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF7D2DFF),
           onPrimary: Color(0xFFF3E8FF),
@@ -61,6 +62,8 @@ class MyApp extends StatelessWidget {
           labelStyle: const TextStyle(color: Color(0xFF5C7580)),
           floatingLabelStyle: const TextStyle(color: Color(0xFF00E5FF)),
           hintStyle: const TextStyle(color: Color(0xFF5C7580)),
+          suffixIconColor: Color(0xFFF0F6F8),
+          iconColor: Color(0xFFF0F6F8),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: Color(0xFF3D6B8A)),
@@ -108,7 +111,22 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const TaskHomePage(),
+      home: const AuthGate(),
     );
   }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<User?>(
+    stream: FirebaseAuth.instance.authStateChanges(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      return snapshot.hasData ? const TaskHomePage() : const AuthScreen();
+    },
+  );
 }
