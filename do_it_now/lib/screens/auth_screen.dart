@@ -58,11 +58,12 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _setError(String message) {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = false;
         _error = message;
       });
+    }
   }
 
   String _firebaseMessage(String code, String? details) => switch (code) {
@@ -142,8 +143,9 @@ class _AuthScreenState extends State<AuthScreen> {
                         labelText: 'Email address',
                       ),
                       validator: (value) {
-                        if (_required(value, 'email address') != null)
+                        if (_required(value, 'email address') != null) {
                           return 'Enter your email address.';
+                        }
                         return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
                                 .hasMatch(value!.trim())
                             ? null
@@ -168,10 +170,12 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                       validator: (value) {
-                        if (_required(value, 'password') != null)
+                        if (_required(value, 'password') != null) {
                           return 'Enter your password.';
-                        if (_registering && value!.length < 6)
+                        }
+                        if (_registering && value!.length < 6) {
                           return 'Use at least 6 characters.';
+                        }
                         return null;
                       },
                     ),

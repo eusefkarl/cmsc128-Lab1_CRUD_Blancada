@@ -32,26 +32,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
     try {
       await _auth.sendPasswordReset(_email.text);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _success = true;
           _message = 'Check your inbox for a password reset link.';
         });
+      }
     } on FirebaseAuthException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _message = error.code == 'user-not-found'
               ? 'No account was found for that email.'
               : 'Could not send the reset email.';
         });
+      }
     } on FormatException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _message = error.message;
         });
+      }
     }
   }
 

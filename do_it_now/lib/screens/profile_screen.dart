@@ -85,13 +85,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
     try {
       await action();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _message = success;
         });
+      }
     } on FirebaseAuthException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _message =
@@ -100,12 +101,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? 'Current password is incorrect.'
               : 'Could not update your account.';
         });
+      }
     } on FormatException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _message = error.message;
         });
+      }
     }
   }
 

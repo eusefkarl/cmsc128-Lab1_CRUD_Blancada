@@ -98,7 +98,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Task Desk'), findsOneWidget);
+    expect(find.text('MISSION CONTROL'), findsOneWidget);
     expect(find.text('Crud test 1'), findsOneWidget);
 
     await tester.tap(find.text('New task'));
