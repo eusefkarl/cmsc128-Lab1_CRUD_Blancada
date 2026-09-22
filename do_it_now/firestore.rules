@@ -53,6 +53,24 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid;
     }
 
+    match /users/{userId} {
+      function ownProfile() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      allow create: if ownProfile()
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
+
+      allow read: if ownProfile();
+
+      allow update: if ownProfile()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.displayName is string;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
