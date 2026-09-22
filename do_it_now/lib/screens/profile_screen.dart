@@ -18,7 +18,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _newPassword = TextEditingController();
   final _auth = AuthService();
   bool _loading = false;
-  String? _message;
+  String? _profileMessage;
+  String? _passwordMessage;
 
   @override
   void initState() {
@@ -42,11 +43,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentEmail = FirebaseAuth.instance.currentUser?.email ?? '';
     if (_email.text.trim() != currentEmail && _currentPassword.text.isEmpty) {
       setState(
-        () => _message = 'Enter your current password to change your email.',
+        () => _profileMessage =
+            'Enter your current password to change your email.',
       );
       return;
     }
-    await _run(() async {
+    await _runProfile(() async {
       await _auth.updateDisplayName(_name.text);
       await _auth.updateEmail(
         email: _email.text,
@@ -58,11 +60,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _changePassword() async {
     if (_currentPassword.text.isEmpty || _newPassword.text.length < 6) {
       setState(
-        () => _message = 'Enter your current password and a new password with 6+ characters.',
+        () => _passwordMessage = 'Enter your current password and a new password with 6+ characters.',
       );
       return;
     }
-    await _run(
+    await _runPassword(
       () => _auth.changePassword(
         currentPassword: _currentPassword.text,
         newPassword: _newPassword.text,
@@ -78,24 +80,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _run(Future<void> Function() action, String success) async {
+  Future<void> _runProfile(
+    Future<void> Function() action,
+    String success,
+  ) async {
     setState(() {
       _loading = true;
-      _message = null;
+      _profileMessage = null;
     });
     try {
       await action();
       if (mounted) {
         setState(() {
           _loading = false;
-          _message = success;
+          _profileMessage = success;
         });
       }
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _message =
+          _profileMessage =
               error.code == 'wrong-password' ||
                   error.code == 'invalid-credential'
               ? 'Current password is incorrect.'
@@ -106,7 +111,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _message = error.message;
+          _profileMessage = error.message;
+        });
+      }
+    }
+  }
+
+  Future<void> _runPassword(
+    Future<void> Function() action,
+    String success,
+  ) async {
+    setState(() {
+      _loading = true;
+      _passwordMessage = null;
+    });
+    try {
+      await action();
+      _currentPassword.clear();
+      _newPassword.clear();
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _passwordMessage = success;
+        });
+      }
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _passwordMessage =
+              error.code == 'wrong-password' ||
+                  error.code == 'invalid-credential'
+              ? 'Current password is incorrect.'
+              : 'Could not change your password.';
+        });
+      }
+    } on FormatException catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _passwordMessage = error.message;
+        });
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _passwordMessage = error.message;
         });
       }
     }
@@ -138,8 +189,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(color: Color(0xFFBFE6F5)),
                 ),
                 const SizedBox(height: 24),
-                if (_message != null) ...[
-                  Text(_message!),
+                if (_profileMessage != null) ...[
+                  Text(_profileMessage!),
                   const SizedBox(height: 16),
                 ],
                 TextFormField(
@@ -173,6 +224,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ?.copyWith(color: const Color(0xFFF0F6F8)),
                 ),
                 const SizedBox(height: 12),
+                if (_passwordMessage != null) ...[
+                  Text(
+                    _passwordMessage!,
+                    style: const TextStyle(color: Color(0xFFFF5272)),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
                   controller: _currentPassword,
                   obscureText: true,

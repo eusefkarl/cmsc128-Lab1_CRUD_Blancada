@@ -57,6 +57,22 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _auth.signInWithGoogle();
+    } on FirebaseAuthException catch (error) {
+      _setError(_firebaseMessage(error.code, error.message));
+    } on FirebaseException catch (error) {
+      _setError(_firebaseMessage(error.code, error.message));
+    } catch (error) {
+      _setError('Google sign-in failed: $error');
+    }
+  }
+
   void _setError(String message) {
     if (mounted) {
       setState(() {
@@ -77,6 +93,9 @@ class _AuthScreenState extends State<AuthScreen> {
     'operation-not-allowed' => 'Email/password sign-in is disabled in Firebase. Enable it in Authentication > Sign-in method.',
     'network-request-failed' =>
       'Network request failed. Check your internet connection.',
+    'popup-closed-by-user' => 'Google sign-in was cancelled.',
+    'account-exists-with-different-credential' =>
+      'An account already exists with another sign-in method.',
     'permission-denied' => 'Firebase rejected the profile write. Deploy the updated Firestore rules.',
     _ => 'Firebase error ($code): ${details ?? 'Please try again.'}',
   };
@@ -205,6 +224,12 @@ class _AuthScreenState extends State<AuthScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(_registering ? 'Create account' : 'Log in'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _signInWithGoogle,
+                      icon: const Icon(Icons.account_circle_outlined),
+                      label: const Text('Continue with Google'),
                     ),
                     TextButton(
                       onPressed: _loading

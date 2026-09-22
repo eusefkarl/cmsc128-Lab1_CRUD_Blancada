@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -61,6 +62,17 @@ class AuthService {
     );
   }
 
+  Future<UserCredential?> signInWithGoogle() {
+    final provider = GoogleAuthProvider()
+      ..addScope('email')
+      ..addScope('profile')
+      ..setCustomParameters({'prompt': 'select_account'});
+    if (kIsWeb) {
+      return _auth.signInWithPopup(provider);
+    }
+    return _auth.signInWithProvider(provider);
+  }
+
   Future<void> sendPasswordReset(String email) {
     final normalizedEmail = email.trim();
     if (!_isValidEmail(normalizedEmail)) {
@@ -92,6 +104,13 @@ class AuthService {
     final email = user?.email;
     if (user == null || email == null) {
       throw StateError('A password account is required.');
+    }
+    if (!user.providerData.any(
+      (provider) => provider.providerId == 'password',
+    )) {
+      throw StateError(
+        'This account uses Google sign-in. Set a password through password recovery first.',
+      );
     }
     if (newPassword.length < 6) {
       throw const FormatException(
