@@ -6,7 +6,9 @@ import '../theme/app_theme.dart';
 import '../widgets/status_panel.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+  const ForgotPasswordScreen({super.key, this.auth});
+
+  final PasswordRecoveryService? auth;
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -15,7 +17,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
-  final _auth = AuthService();
+  late final PasswordRecoveryService _auth;
   bool _loading = false;
   String? _message;
   bool _success = false;
@@ -24,6 +26,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   void dispose() {
     _email.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = widget.auth ?? AuthService();
   }
 
   Future<void> _send() async {
@@ -38,16 +46,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         setState(() {
           _loading = false;
           _success = true;
-          _message = 'Check your inbox for a password reset link.';
+          _message = 'If an account exists for that email, a password-reset link has been sent.';
         });
       }
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _message = error.code == 'user-not-found'
-              ? 'No account was found for that email.'
-              : 'Could not send the reset email.';
+          _success = error.code == 'user-not-found';
+          _message = switch (error.code) {
+            'user-not-found' => 'If an account exists for that email, a password-reset link has been sent.',
+            'too-many-requests' =>
+              'Too many attempts. Wait a while, then try again.',
+            'network-request-failed' =>
+              'The request could not reach the server. Check your connection.',
+            'operation-not-allowed' =>
+              'Password recovery is not enabled for this Firebase project.',
+            _ => 'Could not send the reset email. Please try again.',
+          };
         });
       }
     } on FormatException catch (error) {

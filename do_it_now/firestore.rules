@@ -58,17 +58,36 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == userId;
       }
 
+      function validProfile(data) {
+        return data.keys().hasOnly([
+            'uid',
+            'email',
+            'displayName',
+            'createdAt',
+            'updatedAt'
+          ])
+          && data.uid == userId
+          && data.displayName is string
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp
+          && (!('email' in data)
+              || (data.email is string
+                  && data.email == request.auth.token.get('email', null)));
+      }
+
       allow create: if ownProfile()
-        && request.resource.data.uid == userId
-        && request.resource.data.email is string
-        && request.resource.data.displayName is string;
+        && validProfile(request.resource.data);
 
       allow read: if ownProfile();
 
       allow update: if ownProfile()
         && request.resource.data.uid == resource.data.uid
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.displayName is string;
+        && validProfile(request.resource.data)
+        && (request.resource.data.get('email', null)
+                == resource.data.get('email', null)
+            || (request.auth.token.get('email_verified', false) == true
+                && request.resource.data.get('email', null)
+                    == request.auth.token.get('email', null)));
     }
 
     match /{document=**} {
