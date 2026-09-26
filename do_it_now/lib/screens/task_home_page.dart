@@ -1,15 +1,15 @@
-import 'package:flutter/material.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'dart:async';
 
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/material.dart';
 
 import '../models/task.dart';
 import '../services/task_repository.dart';
+import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/stat.dart';
+import '../widgets/status_panel.dart';
 import '../widgets/task_form_dialog.dart';
 import '../widgets/task_tile.dart';
 import 'profile_screen.dart';
@@ -176,6 +176,13 @@ class _TaskHomePageState extends State<TaskHomePage> {
   String _label(Enum value) =>
       value.name[0].toUpperCase() + value.name.substring(1);
 
+  String _sortLabel(TaskSortOption value) => switch (value) {
+    TaskSortOption.dateAdded => 'Date added',
+    TaskSortOption.dueDate => 'Due date',
+    TaskSortOption.priority => 'Priority',
+    TaskSortOption.tag => 'Category',
+  };
+
   String _userInitial() {
     try {
       final name = FirebaseAuth.instance.currentUser?.displayName;
@@ -189,14 +196,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'DO IT NOW!',
-          style: GoogleFonts.exo2(
-            color: const Color(0xFFF0F6F8),
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text('DO IT NOW!'),
         actions: [
           IconButton(
             onPressed: () => Navigator.push(
@@ -217,19 +217,37 @@ class _TaskHomePageState extends State<TaskHomePage> {
           const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openTaskForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('New task'),
-        backgroundColor: const Color(0xFF7D2DFF),
-        foregroundColor: const Color(0xFFF3E8FF),
-      ),
+      floatingActionButton: MediaQuery.sizeOf(context).width < 700
+          ? FloatingActionButton.extended(
+              onPressed: () => _openTaskForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('New task'),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: StreamBuilder<List<Task>>(
         stream: _repository.watchTasks(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
-              child: Text('Could not load tasks: ${snapshot.error}'),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppColors.highPriority,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Could not load tasks: ${snapshot.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
             );
           }
           if (!snapshot.hasData) {
@@ -242,198 +260,266 @@ class _TaskHomePageState extends State<TaskHomePage> {
                 (task) => task.id == null || !_hiddenTaskIds.contains(task.id),
               )
               .toList();
+          final total = allTasks.length;
           final completedCount = allTasks.where((task) => task.isDone).length;
           final completionRatio = allTasks.isEmpty
               ? 0.0
               : completedCount / allTasks.length;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E1620),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF00E5FF)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x335A9FB4),
-                      blurRadius: 14,
-                      offset: Offset(0, 6),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 700;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 16 : 24,
+                      compact ? 16 : 24,
+                      compact ? 16 : 24,
+                      compact ? 96 : 32,
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MISSION CONTROL',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFFBFE6F5),
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Your current progress:',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: const Color(0xFFF0F6F8),
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Complete tasks to level up.',
-                      style: TextStyle(color: Color(0xFF5C7580)),
-                    ),
-                    const SizedBox(height: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: completionRatio,
-                        minHeight: 8,
-                        backgroundColor: const Color(0xFF1C2B3A),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF00E5FF),
+                    children: [
+                      StatusPanel(
+                        padding: 20,
+                        child: LayoutBuilder(
+                          builder: (context, panelConstraints) {
+                            final horizontal = panelConstraints.maxWidth >= 680;
+                            final metrics = Row(
+                              children: [
+                                Stat(label: 'Total', value: '$total'),
+                                const SizedBox(width: 16),
+                                Stat(label: 'Done', value: '$completedCount'),
+                                const SizedBox(width: 16),
+                                Stat(
+                                  label: 'Open',
+                                  value: '${total - completedCount}',
+                                ),
+                              ],
+                            );
+                            final title = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Wrap(
+                                  spacing: 10,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    StatusEyebrow('Mission control'),
+                                    Text(
+                                      'All tasks',
+                                      style: TextStyle(
+                                        color: AppColors.secondaryText,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Task completion',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        fontFamily: 'Exo 2',
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Track your task completion.',
+                                  style: TextStyle(
+                                    color: AppColors.secondaryText,
+                                  ),
+                                ),
+                              ],
+                            );
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (horizontal)
+                                  Row(
+                                    children: [
+                                      Expanded(child: title),
+                                      const SizedBox(width: 24),
+                                      SizedBox(width: 340, child: metrics),
+                                    ],
+                                  )
+                                else ...[
+                                  title,
+                                  const SizedBox(height: 16),
+                                  metrics,
+                                ],
+                                const SizedBox(height: 16),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: completionRatio,
+                                    minHeight: 8,
+                                    semanticsLabel: 'Task completion',
+                                    semanticsValue:
+                                        '${(completionRatio * 100).round()}',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${(completionRatio * 100).round()}% complete',
+                                  style: const TextStyle(
+                                    color: AppColors.secondaryText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${(completionRatio * 100).round()}% complete',
-                      style: const TextStyle(
-                        color: Color(0xFF5C7580),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Stat(label: 'Total', value: '${allTasks.length}'),
-                  const SizedBox(width: 12),
-                  Stat(label: 'Done', value: '$completedCount'),
-                  const SizedBox(width: 12),
-                  Stat(
-                    label: 'Open',
-                    value: '${allTasks.length - completedCount}',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  _controlShell(
-                    icon: Icons.sort,
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<TaskSortOption>(
-                        value: _sortOption,
-                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
-                        dropdownColor: const Color(0xFF0E1620),
-                        iconEnabledColor: const Color(0xFF5C7580),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _sortOption = value);
-                          }
-                        },
-                        items: TaskSortOption.values
-                            .map(
-                              (value) => DropdownMenuItem(
-                                value: value,
-                                child: Text('Sort: ${_label(value)}'),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Tasks',
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      fontFamily: 'Exo 2',
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  ),
-                  _controlShell(
-                    icon: Icons.sell_outlined,
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _categoryFilter?.name ?? 'all',
-                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
-                        dropdownColor: const Color(0xFF0E1620),
-                        iconEnabledColor: const Color(0xFF5C7580),
-                        onChanged: (value) => setState(
-                          () =>
-                              _categoryFilter = value == null || value == 'all'
-                              ? null
-                              : TaskCategory.values.byName(value),
+                            ),
+                            if (!compact)
+                              FilledButton.icon(
+                                onPressed: () => _openTaskForm(),
+                                icon: const Icon(Icons.add),
+                                label: const Text('New task'),
+                              ),
+                          ],
                         ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('All tags'),
+                      ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          _controlShell(
+                            icon: Icons.sort,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<TaskSortOption>(
+                                value: _sortOption,
+                                style: const TextStyle(
+                                  color: AppColors.primaryText,
+                                ),
+                                dropdownColor: AppColors.surface,
+                                iconEnabledColor: AppColors.secondaryText,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _sortOption = value);
+                                  }
+                                },
+                                items: TaskSortOption.values
+                                    .map(
+                                      (value) => DropdownMenuItem(
+                                        value: value,
+                                        child: Text(
+                                          'Sort: ${_sortLabel(value)}',
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
                           ),
-                          ...TaskCategory.values.map(
-                            (value) => DropdownMenuItem(
-                              value: value.name,
-                              child: Text(_label(value)),
+                          _controlShell(
+                            icon: Icons.sell_outlined,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _categoryFilter?.name ?? 'all',
+                                style: const TextStyle(
+                                  color: AppColors.primaryText,
+                                ),
+                                dropdownColor: AppColors.surface,
+                                iconEnabledColor: AppColors.secondaryText,
+                                onChanged: (value) => setState(
+                                  () => _categoryFilter =
+                                      value == null || value == 'all'
+                                      ? null
+                                      : TaskCategory.values.byName(value),
+                                ),
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: 'all',
+                                    child: Text('All categories'),
+                                  ),
+                                  ...TaskCategory.values.map(
+                                    (value) => DropdownMenuItem(
+                                      value: value.name,
+                                      child: Text(_label(value)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          _controlShell(
+                            icon: Icons.flag_outlined,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _priorityFilter?.name ?? 'all',
+                                style: const TextStyle(
+                                  color: AppColors.primaryText,
+                                ),
+                                dropdownColor: AppColors.surface,
+                                iconEnabledColor: AppColors.secondaryText,
+                                onChanged: (value) => setState(
+                                  () => _priorityFilter =
+                                      value == null || value == 'all'
+                                      ? null
+                                      : TaskPriority.values.byName(value),
+                                ),
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: 'all',
+                                    child: Text('All priorities'),
+                                  ),
+                                  ...TaskPriority.values.map(
+                                    (value) => DropdownMenuItem(
+                                      value: value.name,
+                                      child: Text(_label(value)),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  _controlShell(
-                    icon: Icons.flag_outlined,
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _priorityFilter?.name ?? 'all',
-                        style: GoogleFonts.exo2(color: const Color(0xFFF0F6F8)),
-                        dropdownColor: const Color(0xFF0E1620),
-                        iconEnabledColor: const Color(0xFF5C7580),
-                        onChanged: (value) => setState(
-                          () =>
-                              _priorityFilter = value == null || value == 'all'
-                              ? null
-                              : TaskPriority.values.byName(value),
+                      const SizedBox(height: 20),
+                      if (tasks.isEmpty)
+                        EmptyState(filtered: allTasks.isNotEmpty)
+                      else
+                        ...tasks.map(
+                          (task) => TaskTile(
+                            task: task,
+                            onChanged: (value) async {
+                              task.isDone = value ?? false;
+                              try {
+                                await _repository.updateTask(task);
+                              } catch (error) {
+                                _showError(error);
+                              }
+                            },
+                            onEdit: () => _openTaskForm(task: task),
+                            onDelete: () => _deleteTask(task),
+                          ),
                         ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('All priorities'),
-                          ),
-                          ...TaskPriority.values.map(
-                            (value) => DropdownMenuItem(
-                              value: value.name,
-                              child: Text(_label(value)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (tasks.isEmpty)
-                const EmptyState()
-              else
-                ...tasks.map(
-                  (task) => TaskTile(
-                    task: task,
-                    onChanged: (value) async {
-                      task.isDone = value ?? false;
-                      try {
-                        await _repository.updateTask(task);
-                      } catch (error) {
-                        _showError(error);
-                      }
-                    },
-                    onEdit: () => _openTaskForm(task: task),
-                    onDelete: () => _deleteTask(task),
+                    ],
                   ),
                 ),
-            ],
+              );
+            },
           );
         },
       ),
@@ -444,14 +530,16 @@ class _TaskHomePageState extends State<TaskHomePage> {
       Container(
         padding: const EdgeInsets.only(left: 10, right: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF131E2B),
+          color: AppColors.raisedSurface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF3D6B8A)),
+          border: Border.all(color: AppColors.controlBorder),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: const Color(0xFF00E5FF)),
+            ExcludeSemantics(
+              child: Icon(icon, size: 18, color: AppColors.cyan),
+            ),
             const SizedBox(width: 6),
             child,
           ],

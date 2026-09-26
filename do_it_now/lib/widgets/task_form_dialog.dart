@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/task.dart';
+import 'status_panel.dart';
 
 class TaskFormDialog extends StatefulWidget {
   const TaskFormDialog({super.key, this.task});
@@ -17,6 +18,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   TimeOfDay? _dueTime;
   late TaskPriority _priority;
   late TaskCategory _category;
+  bool _titleError = false;
 
   @override
   void initState() {
@@ -37,7 +39,10 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   }
 
   void _submit() {
-    if (_titleController.text.trim().isEmpty) return;
+    if (_titleController.text.trim().isEmpty) {
+      setState(() => _titleError = true);
+      return;
+    }
     Navigator.pop(
       context,
       Task(
@@ -70,7 +75,8 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
     if (selectedTime != null) setState(() => _dueTime = selectedTime);
   }
 
-  String _formatDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
+  String _formatDate(BuildContext context, DateTime date) =>
+      MaterialLocalizations.of(context).formatMediumDate(date);
 
   @override
   Widget build(BuildContext context) {
@@ -80,111 +86,126 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 24, 16),
-      title: Text(
-        isEditing ? 'Edit task' : 'New task',
-        style: const TextStyle(
-          color: Color(0xFFF0F6F8),
-          fontWeight: FontWeight.w700,
-        ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const StatusEyebrow('Mission control'),
+          const SizedBox(height: 6),
+          Text(isEditing ? 'Edit task' : 'New task'),
+        ],
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _titleController,
-              autofocus: true,
-              style: const TextStyle(color: Color(0xFFF0F6F8)),
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _titleController,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (value) {
+                  if (_titleError && value.trim().isNotEmpty) {
+                    setState(() => _titleError = false);
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  helperText: 'Required',
+                  errorText: _titleError ? 'Enter a task title.' : null,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _detailsController,
-              maxLines: 2,
-              style: const TextStyle(color: Color(0xFFF0F6F8)),
-              decoration: const InputDecoration(
-                labelText: 'Details',
-                alignLabelWithHint: true,
-                contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _detailsController,
+                minLines: 2,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  labelText: 'Details',
+                  alignLabelWithHint: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
+              const SizedBox(height: 16),
+              Builder(
+                builder: (context) {
+                  final dateButton = OutlinedButton.icon(
                     onPressed: _selectDueDate,
                     icon: const Icon(Icons.calendar_today_outlined),
                     label: Text(
-                      _dueDate == null ? 'Due date' : _formatDate(_dueDate!),
+                      _dueDate == null
+                          ? 'Due date'
+                          : _formatDate(context, _dueDate!),
                     ),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
+                  );
+                  final timeButton = OutlinedButton.icon(
                     onPressed: _selectDueTime,
                     icon: const Icon(Icons.schedule_outlined),
                     label: Text(_dueTime?.format(context) ?? 'Due time'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<TaskPriority>(
-              initialValue: _priority,
-              isExpanded: true,
-              style: const TextStyle(color: Color(0xFFF0F6F8)),
-              decoration: const InputDecoration(labelText: 'Priority'),
-              items: TaskPriority.values
-                  .map(
-                    (priority) => DropdownMenuItem(
-                      value: priority,
-                      child: Text(
-                        priority.name[0].toUpperCase() +
-                            priority.name.substring(1),
+                  );
+                  if (MediaQuery.sizeOf(context).width < 520) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        dateButton,
+                        const SizedBox(height: 8),
+                        timeButton,
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: dateButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: timeButton),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<TaskPriority>(
+                initialValue: _priority,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Priority'),
+                items: TaskPriority.values
+                    .map(
+                      (priority) => DropdownMenuItem(
+                        value: priority,
+                        child: Text(
+                          priority.name[0].toUpperCase() +
+                              priority.name.substring(1),
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _priority = value);
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<TaskCategory>(
-              initialValue: _category,
-              isExpanded: true,
-              style: const TextStyle(color: Color(0xFFF0F6F8)),
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: TaskCategory.values
-                  .map(
-                    (category) => DropdownMenuItem(
-                      value: category,
-                      child: Text(
-                        category.name[0].toUpperCase() +
-                            category.name.substring(1),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _priority = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<TaskCategory>(
+                initialValue: _category,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: TaskCategory.values
+                    .map(
+                      (category) => DropdownMenuItem(
+                        value: category,
+                        child: Text(
+                          category.name[0].toUpperCase() +
+                              category.name.substring(1),
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _category = value);
-              },
-            ),
-          ],
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _category = value);
+                },
+              ),
+            ],
+          ),
         ),
       ),
       actions: [

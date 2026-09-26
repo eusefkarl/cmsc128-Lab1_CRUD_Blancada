@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/task.dart';
+import '../theme/app_theme.dart';
 
 class TaskTile extends StatelessWidget {
   const TaskTile({
@@ -19,6 +20,23 @@ class TaskTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priorityColor = _priorityColor(task.priority);
+    final details = _taskDetails(context, priorityColor);
+    final actions = Wrap(
+      spacing: 4,
+      children: [
+        IconButton(
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit_outlined),
+          tooltip: 'Edit task',
+        ),
+        IconButton(
+          onPressed: onDelete,
+          icon: const Icon(Icons.delete_outline),
+          tooltip: 'Delete task',
+        ),
+      ],
+    );
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
@@ -26,88 +44,113 @@ class TaskTile extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: task.isDone ? const Color(0xFF00E5FF) : priorityColor,
-              width: 6,
+              color: task.isDone ? AppColors.cyan : priorityColor,
+              width: 3,
             ),
           ),
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-          leading: Checkbox(value: task.isDone, onChanged: onChanged),
-          title: Text(
-            task.title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              decoration: task.isDone ? TextDecoration.lineThrough : null,
-              color: task.isDone
-                  ? const Color(0xFF5C7580)
-                  : const Color(0xFFF0F6F8),
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (task.details.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Text(
-                  task.details,
-                  style: TextStyle(color: const Color(0xFF5C7580)),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _Badge(
-                    label: _label(task.priority),
-                    color: priorityColor,
-                    icon: Icons.flag_outlined,
-                  ),
-                  _Badge(
-                    label: _label(task.category),
-                    color: const Color(0xFF3D6B8A),
-                    icon: Icons.sell_outlined,
-                  ),
-                  if (task.dueDate != null)
-                    _Badge(
-                      label: 'Due ${task.dueDate!.month}/${task.dueDate!.day}',
-                      color: const Color(0xFF5B6F7B),
-                      icon: Icons.calendar_today_outlined,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 560;
+            final checkbox = SizedBox(
+              width: 48,
+              height: 48,
+              child: Checkbox(
+                value: task.isDone,
+                onChanged: onChanged,
+                semanticLabel:
+                    '${task.isDone ? 'Mark incomplete' : 'Complete'} ${task.title}',
+              ),
+            );
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            checkbox,
+                            const SizedBox(width: 8),
+                            Expanded(child: details),
+                          ],
+                        ),
+                        Align(alignment: Alignment.centerRight, child: actions),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        checkbox,
+                        const SizedBox(width: 8),
+                        Expanded(child: details),
+                        actions,
+                      ],
                     ),
-                  if (task.dueTime != null)
-                    _Badge(
-                      label: task.dueTime!.format(context),
-                      color: const Color(0xFF5B6F7B),
-                      icon: Icons.schedule_outlined,
-                    ),
-                ],
-              ),
-            ],
-          ),
-          trailing: Wrap(
-            children: [
-              IconButton(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Edit task',
-              ),
-              IconButton(
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Delete task',
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
+  Widget _taskDetails(BuildContext context, Color priorityColor) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SizedBox(height: 8),
+      Text(
+        task.title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          decoration: task.isDone ? TextDecoration.lineThrough : null,
+          color: task.isDone ? AppColors.secondaryText : AppColors.primaryText,
+        ),
+      ),
+      if (task.details.isNotEmpty) ...[
+        const SizedBox(height: 4),
+        Text(
+          task.details,
+          style: const TextStyle(color: AppColors.secondaryText),
+        ),
+      ],
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _Badge(
+            label: _label(task.priority),
+            color: priorityColor,
+            icon: Icons.flag_outlined,
+          ),
+          _Badge(
+            label: _label(task.category),
+            color: AppColors.secondaryText,
+            icon: Icons.sell_outlined,
+          ),
+          if (task.dueDate != null)
+            _Badge(
+              label:
+                  'Due ${MaterialLocalizations.of(context).formatMediumDate(task.dueDate!)}',
+              color: AppColors.secondaryText,
+              icon: Icons.calendar_today_outlined,
+            ),
+          if (task.dueTime != null)
+            _Badge(
+              label: task.dueTime!.format(context),
+              color: AppColors.secondaryText,
+              icon: Icons.schedule_outlined,
+            ),
+        ],
+      ),
+    ],
+  );
+
   Color _priorityColor(TaskPriority priority) => switch (priority) {
-    TaskPriority.high => const Color(0xFFFF2D55),
-    TaskPriority.medium => const Color(0xFFFFB100),
-    TaskPriority.low => const Color(0xFF39FF8F),
+    TaskPriority.high => AppColors.highPriority,
+    TaskPriority.medium => AppColors.mediumPriority,
+    TaskPriority.low => AppColors.lowPriority,
   };
 
   String _label(Enum value) =>
@@ -123,23 +166,22 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
-      color: const Color(0xFF1C2B3A),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color),
+      color: AppColors.raisedSurface,
+      borderRadius: BorderRadius.circular(5),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
+        ExcludeSemantics(child: Icon(icon, size: 15, color: color)),
+        const SizedBox(width: 5),
         Text(
           label,
           style: TextStyle(
             color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],

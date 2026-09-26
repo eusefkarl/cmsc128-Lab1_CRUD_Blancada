@@ -199,6 +199,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Crud test 1'), findsOneWidget);
     expect(find.text('Crud test 2'), findsNothing);
+    expect(find.text('2'), findsOneWidget);
 
     await tester.tap(find.byType(DropdownButton<String>).last);
     await tester.pumpAndSettle();
@@ -226,7 +227,7 @@ void main() {
 
     await tester.tap(find.byType(DropdownButton<TaskSortOption>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sort: Tag'));
+    await tester.tap(find.text('Sort: Category'));
     await tester.pumpAndSettle();
 
     await tester.drag(find.byType(ListView), const Offset(0, -500));
@@ -236,5 +237,37 @@ void main() {
     final othersOffset = tester.getCenter(find.text('Other task'));
     expect(personalOffset.dy, lessThan(schoolOffset.dy));
     expect(schoolOffset.dy, lessThan(othersOffset.dy));
+  });
+
+  testWidgets('reflows the dashboard and task form on a narrow display', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            size: const Size(320, 760),
+            textScaler: const TextScaler.linear(2),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: TaskHomePage(repository: FakeTaskRepository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Due date'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }
