@@ -14,7 +14,7 @@ Firestore was chosen instead of an in-memory list because tasks must survive bro
 
 ## Firebase Setup
 
-The project is configured for the Firebase project in `lib/firebase_options.dart` and currently supports Web, Windows, and macOS.
+The project is configured for the Firebase project in `lib/firebase_options.dart` and currently supports Web, Windows, and macOS. The platform client API keys are supplied at build time from a local, ignored `.env` file.
 
 Before running the app:
 
@@ -25,10 +25,10 @@ Before running the app:
 5. Review the password reset and email change templates under **Authentication -> Templates**.
 6. Publish the rules in `firestore.rules`.
 
-From a machine with the Firebase CLI authenticated, deploy the rules with:
+From a machine with Node.js and the Firebase CLI installed and authenticated, deploy the rules to the intended project with:
 
 ```powershell
-firebase deploy --only firestore:rules
+firebase deploy --only firestore:rules --project doitnow-c26f9
 ```
 
 The rules file is intentionally committed. Firestore rules are access-control configuration, not secret credentials. Do not commit Firebase service-account private keys or Admin SDK credentials.
@@ -40,24 +40,30 @@ The rules file is intentionally committed. Firestore rules are access-control co
 - Flutter SDK compatible with Dart `^3.13.2`
 - A configured Firebase project
 - Chrome for Web, or a supported desktop Flutter platform
-- Firebase CLI only if deploying rules from the command line
+- Node.js and the Firebase CLI for deploying rules or running the local emulators
 
 From the project directory:
 
 ```powershell
+Copy-Item .env.example .env
+# Fill the three FIREBASE_*_API_KEY values in .env from Firebase Console.
 flutter pub get
 flutter analyze
 flutter test
-flutter run -d chrome
+flutter run -d chrome --dart-define-from-file=.env
 ```
+
+The `.env` file is ignored by Git and is not a Flutter asset. Flutter reads it only when `--dart-define-from-file=.env` is passed. Use the same flag for `flutter build` and supported-platform integration tests, for example `flutter build web --dart-define-from-file=.env`. The app reports a configuration error if a platform key is missing or still contains the template placeholder. Firebase web client keys are still present in compiled web output; keep service-account keys and other server secrets out of the app entirely. If you regenerate `lib/firebase_options.dart` with FlutterFire CLI, restore its environment-variable API-key bindings before committing.
 
 For Windows desktop:
 
 ```powershell
-flutter run -d windows
+flutter run -d windows --dart-define-from-file=.env
 ```
 
 The app uses Firebase Authentication for login and stores the current UID, email, and display name in the owner's `users/{uid}` Firestore profile document. Firebase Authentication is authoritative for account credentials and profile identity; Firestore mirrors the active values for app data. Passwords are never written to Firestore.
+
+Registration creates an email/password account in Firebase Authentication, then stores its UID, email, and display name in `users/{uid}`. Login delegates password verification to Firebase Authentication. Its SDK restores the browser session after refresh; `AuthGate` shows the dashboard only while a user is authenticated. Sign-out clears the Firebase session and the app navigator so protected screens cannot remain open. Firestore rules enforce ownership using the authenticated UID.
 
 ### Profile and password flows
 
@@ -67,13 +73,15 @@ The app uses Firebase Authentication for login and stores the current UID, email
 - Direct password changes require the current password, a new password, and confirmation. Passwords are managed only by Firebase Authentication.
 - Password recovery uses Firebase's hosted email action handler. Links use single-use, expiring action codes; Firebase applies the new password when the user completes the hosted flow. The app does not receive or store reset codes.
 - The reset screen uses neutral feedback so it does not reveal whether an email is registered.
+- Google-only accounts can update their display name here; their email and password are managed through Google. Password-provider accounts can request a verified email change and change their password in the app.
+- Unsaved profile edits require an explicit Stay or Discard choice before Back or logout. Profile operations show progress and then success or error feedback.
 
 For an email change, check the **new** address, including its spam/junk folder. The old address remains active until the link is opened. If the app confirms the request but no message arrives, check **Authentication -> Templates** in Firebase Console and the project's [email sending limits](https://firebase.google.com/docs/auth/limits). When using the Authentication emulator, no real email is delivered; its verification URL appears in the terminal running `firebase emulators:start`.
 
 To return a completed password reset or email verification to the deployed app, build with its root URL as the continue URL:
 
 ```powershell
-flutter run -d chrome --dart-define=FIREBASE_AUTH_CONTINUE_URL=https://YOUR_DEPLOYED_APP_DOMAIN/
+flutter run -d chrome --dart-define-from-file=.env --dart-define=FIREBASE_AUTH_CONTINUE_URL=https://YOUR_DEPLOYED_APP_DOMAIN/
 ```
 
 Replace the example with the actual deployed app URL and add that domain to Firebase Authentication's **Authorized domains**. If this setting is omitted, Firebase's default hosted action handler still processes the email action, but it may not return the user to the app afterward. No custom email action handler is currently required.
@@ -89,7 +97,7 @@ firebase emulators:start --only auth,firestore --project doitnow-c26f9 --export-
 Run the app against emulators in a separate terminal:
 
 ```powershell
-flutter run -d chrome --dart-define=USE_FIREBASE_EMULATORS=true
+flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true
 ```
 
 The emulator flag is opt-in. Without it, the app uses the Firebase project configured by FlutterFire. To restore saved emulator data after a restart, add `--import=.firebase-emulator-data` to the start command; the export flag writes changes back when the emulators stop.
@@ -198,7 +206,7 @@ flutter analyze
 flutter test
 ```
 
-Widget tests use a fake repository, so they do not require network access or a live Firestore database. They cover serialization, task editing, deletion confirmation, Undo, completion updates, filtering, and tag ordering.
+Widget tests use fake repositories and account services, so they do not require network access or a live Firestore database. They cover account settings as well as task serialization, editing, deletion confirmation, Undo, completion updates, filtering, and tag ordering.
 
 Run the Firebase-backed account and Firestore-rules checks in isolated emulators:
 
@@ -206,4 +214,4 @@ Run the Firebase-backed account and Firestore-rules checks in isolated emulators
 firebase emulators:exec --only auth,firestore --project doitnow-c26f9 "node --test scripts/account_compliance.test.mjs"
 ```
 
-These checks create throwaway accounts in the local Authentication emulator, read one-time email action codes from its local endpoint, and verify changes against Authentication and the deployed Firestore rules. They do not use real accounts or production data. The Flutter `integration_test` suite is also available for native targets; Flutter's integration runner does not support Chrome.
+These checks create throwaway accounts in the local Authentication emulator, read one-time email action codes from its local endpoint, and verify changes against Authentication and the local Firestore rules. They do not use real accounts or production data. The Flutter `integration_test` suite is also available for native targets using `flutter test integration_test/account_compliance_test.dart -d windows --dart-define-from-file=.env` while the emulators run; Flutter's integration runner does not support Chrome.

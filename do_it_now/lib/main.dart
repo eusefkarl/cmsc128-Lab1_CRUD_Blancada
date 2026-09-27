@@ -13,7 +13,14 @@ import 'services/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseOptions options;
+  try {
+    options = DefaultFirebaseOptions.currentPlatform;
+  } on StateError catch (error) {
+    runApp(StartupConfigurationError(message: error.message.toString()));
+    return;
+  }
+  await Firebase.initializeApp(options: options);
   if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
     await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
     FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
@@ -21,15 +28,86 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
+class StartupConfigurationError extends StatelessWidget {
+  const StartupConfigurationError({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'DO IT NOW! — setup required',
+    theme: AppTheme.dark,
+    home: Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Firebase setup required',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                SelectableText(message),
+                const SizedBox(height: 16),
+                const SelectableText(
+                  'Restart with: flutter run -d chrome '
+                  '--dart-define-from-file=.env',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
+  Widget build(BuildContext context) => AuthNavigationScope(
+    sessionIds: FirebaseAuth.instance.authStateChanges().map(
+      (user) => user?.uid,
+    ),
+    initialSessionId: FirebaseAuth.instance.currentUser?.uid,
+    home: const AuthGate(),
+  );
+}
+
+class AuthNavigationScope extends StatelessWidget {
+  const AuthNavigationScope({
+    super.key,
+    required this.sessionIds,
+    required this.home,
+    this.initialSessionId,
+  });
+
+  final Stream<String?> sessionIds;
+  final String? initialSessionId;
+  final Widget home;
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'DO IT NOW!',
-      theme: AppTheme.dark,
-      home: const AuthGate(),
+    return StreamBuilder<String?>(
+      stream: sessionIds,
+      builder: (context, snapshot) => MaterialApp(
+        // Recreate the navigator when the account changes. Pushed account
+        // routes cannot outlive sign-out, even when it happens elsewhere.
+        key: ValueKey(
+          snapshot.connectionState == ConnectionState.waiting
+              ? initialSessionId
+              : snapshot.data,
+        ),
+        title: 'DO IT NOW!',
+        theme: AppTheme.dark,
+        home: home,
+      ),
     );
   }
 }

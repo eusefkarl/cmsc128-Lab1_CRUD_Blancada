@@ -31,6 +31,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _syncing = false;
   bool _nameEdited = false;
   bool _emailEdited = false;
+  bool _allowExit = false;
+  String _savedName = '';
+  String _savedEmail = '';
+  String? _pendingEmail;
+  String? _activeAction;
   String? _nameMessage;
   String? _emailMessage;
   String? _passwordMessage;
@@ -44,6 +49,15 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   bool get _busy => _loading || _syncing;
 
+  bool get _hasUnsavedChanges =>
+      _name.text.trim() != _savedName ||
+      (_email.text.trim() != _savedEmail &&
+          _email.text.trim() != _pendingEmail) ||
+      _emailCurrentPassword.text.isNotEmpty ||
+      _passwordCurrentPassword.text.isNotEmpty ||
+      _newPassword.text.isNotEmpty ||
+      _confirmPassword.text.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +65,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     WidgetsBinding.instance.addObserver(this);
     _name.text = _user?.displayName ?? '';
     _email.text = _user?.email ?? '';
+    _savedName = _name.text;
+    _savedEmail = _email.text;
     _refreshAccount();
   }
 
@@ -77,19 +93,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     setState(() => _syncing = true);
     try {
       final user = await _auth.refreshAndSyncCurrentUserProfile();
-      if (user == null || !mounted) return;
+      if (!mounted) return;
+      if (user == null) {
+        _clearPasswordFields();
+        setState(() {});
+        return;
+      }
       final emailChanged = previousEmail != user.email;
       setState(() {
-        if (!_nameEdited) _name.text = user.displayName;
-        if (!_emailEdited || emailChanged) {
+        _savedName = user.displayName;
+        _savedEmail = user.email ?? '';
+        if (!_nameEdited) _name.text = _savedName;
+        final verifiedPendingEmail =
+            emailChanged && user.email == _pendingEmail;
+        if ((!_emailEdited && (_pendingEmail == null || emailChanged)) ||
+            verifiedPendingEmail) {
           _email.text = user.email ?? '';
           _emailEdited = false;
+          _pendingEmail = null;
         }
         if (emailChanged) {
-          _emailCurrentPassword.clear();
-          _passwordCurrentPassword.clear();
-          _newPassword.clear();
-          _confirmPassword.clear();
           _emailMessage = 'Email address updated after verification.';
           _emailTone = _FeedbackTone.success;
         }
@@ -114,9 +137,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _saveDisplayName() async {
+    if (_busy) return;
     if (!(_nameFormKey.currentState?.validate() ?? false)) return;
     setState(() {
       _loading = true;
+      _activeAction = 'Saving display name…';
       _nameMessage = null;
     });
     try {
@@ -124,6 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (!mounted) return;
       setState(() {
         _nameEdited = false;
+        _savedName = _name.text.trim();
         _nameMessage = 'Display name updated.';
         _nameTone = _FeedbackTone.success;
       });
@@ -149,11 +175,17 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _activeAction = null;
+        });
+      }
     }
   }
 
   Future<void> _sendEmailVerification() async {
+    if (_busy || !_hasPasswordProvider) return;
     if (!(_emailFormKey.currentState?.validate() ?? false)) return;
     final currentEmail = _user?.email;
     final requestedEmail = _email.text.trim();
@@ -174,6 +206,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     setState(() {
       _loading = true;
+      _activeAction = 'Requesting verification email…';
       _emailMessage = null;
     });
     try {
@@ -184,7 +217,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (!mounted) return;
       setState(() {
         _emailCurrentPassword.clear();
-        _emailEdited = true;
+        _emailEdited = false;
+        _pendingEmail = requestedEmail;
         _emailMessage =
             'Verification requested for $requestedEmail. Check that inbox and its spam/junk folder. Your current email remains active until you verify it.';
         _emailTone = _FeedbackTone.info;
@@ -212,14 +246,21 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } finally {
       _emailCurrentPassword.clear();
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _activeAction = null;
+        });
+      }
     }
   }
 
   Future<void> _changePassword() async {
+    if (_busy || !_hasPasswordProvider) return;
     if (!(_passwordFormKey.currentState?.validate() ?? false)) return;
     setState(() {
       _loading = true;
+      _activeAction = 'Changing password…';
       _passwordMessage = null;
     });
     try {
@@ -256,7 +297,12 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _activeAction = null;
+        });
+      }
     }
   }
 
@@ -279,11 +325,45 @@ class _ProfileScreenState extends State<ProfileScreen>
   };
 
   Future<void> _logout() async {
+    if (_busy) return;
+    if (!await _confirmDiscard()) return;
     _clearPasswordFields();
     await _auth.logout();
     if (mounted) {
+      _allowExit = true;
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_hasUnsavedChanges) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Discard unsaved changes?'),
+            content: const Text(
+              'Your unsaved profile edits and password entries will be lost.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Stay'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _handleBlockedPop() async {
+    if (_busy || !await _confirmDiscard() || !mounted) return;
+    _clearPasswordFields();
+    setState(() => _allowExit = true);
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _clearPasswordFields() {
@@ -330,9 +410,25 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final user = _user;
-    final displayName = user?.displayName ?? _name.text;
-    final email = user?.email ?? '';
+    if (user == null) {
+      return const Scaffold(
+        appBar: null,
+        body: Center(child: Text('Sign in to view your profile.')),
+      );
+    }
+    return PopScope(
+      canPop: _allowExit || (!_hasUnsavedChanges && !_busy),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBlockedPop();
+        if (didPop) _clearPasswordFields();
+      },
+      child: _buildProfileScaffold(context, user),
+    );
+  }
 
+  Widget _buildProfileScaffold(BuildContext context, AuthAccountSnapshot user) {
+    final displayName = user.displayName;
+    final email = user.email ?? '';
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: LayoutBuilder(
@@ -389,6 +485,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (_activeAction != null) ...[
+                    Semantics(liveRegion: true, child: Text(_activeAction!)),
+                    const SizedBox(height: 8),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 16),
+                  ],
                   StatusPanel(
                     padding: 20,
                     child: Form(
@@ -404,9 +506,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _name,
+                            readOnly: _busy,
                             autofillHints: const [AutofillHints.name],
                             textInputAction: TextInputAction.done,
-                            onChanged: (_) => _nameEdited = true,
+                            onChanged: (_) => setState(
+                              () =>
+                                  _nameEdited = _name.text.trim() != _savedName,
+                            ),
                             decoration: const InputDecoration(
                               labelText: 'Display name',
                             ),
@@ -440,26 +546,39 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
-                            autofillHints: const [AutofillHints.email],
-                            onChanged: (_) => _emailEdited = true,
-                            decoration: const InputDecoration(
-                              labelText: 'New email address',
+                          if (_hasPasswordProvider)
+                            TextFormField(
+                              controller: _email,
+                              readOnly: _busy,
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.email],
+                              onChanged: (_) =>
+                                  setState(() => _emailEdited = true),
+                              decoration: const InputDecoration(
+                                labelText: 'New email address',
+                              ),
+                              validator: (value) =>
+                                  value == null ||
+                                      !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                                          .hasMatch(value.trim())
+                                  ? 'Enter a valid email address.'
+                                  : null,
+                            )
+                          else
+                            TextFormField(
+                              initialValue: email,
+                              readOnly: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Current email address',
+                              ),
                             ),
-                            validator: (value) =>
-                                value == null ||
-                                    !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                        .hasMatch(value.trim())
-                                ? 'Enter a valid email address.'
-                                : null,
-                          ),
                           if (_hasPasswordProvider) ...[
                             const SizedBox(height: 16),
                             TextField(
                               controller: _emailCurrentPassword,
+                              readOnly: _busy,
                               obscureText: true,
+                              onChanged: (_) => setState(() {}),
                               autofillHints: const [AutofillHints.password],
                               decoration: const InputDecoration(
                                 labelText: 'Current password',
@@ -480,20 +599,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ],
                           if (_syncing) ...[
                             const SizedBox(height: 12),
+                            const Text('Checking account status…'),
                             const LinearProgressIndicator(),
                           ],
-                          const SizedBox(height: 16),
-                          FilledButton.tonal(
-                            onPressed: _busy || !_hasPasswordProvider
-                                ? null
-                                : _sendEmailVerification,
-                            child: const Text('Send verification email'),
-                          ),
-                          TextButton.icon(
-                            onPressed: _loading ? null : _refreshAccount,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Check verification status'),
-                          ),
+                          if (_hasPasswordProvider) ...[
+                            const SizedBox(height: 16),
+                            FilledButton.tonal(
+                              onPressed: _busy ? null : _sendEmailVerification,
+                              child: const Text('Send verification email'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _busy ? null : _refreshAccount,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Check verification status'),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -520,7 +640,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ] else ...[
                             TextFormField(
                               controller: _passwordCurrentPassword,
+                              readOnly: _busy,
                               obscureText: true,
+                              onChanged: (_) => setState(() {}),
                               autofillHints: const [AutofillHints.password],
                               decoration: const InputDecoration(
                                 labelText: 'Current password',
@@ -531,7 +653,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _newPassword,
+                              readOnly: _busy,
                               obscureText: true,
+                              onChanged: (_) => setState(() {}),
                               autofillHints: const [AutofillHints.newPassword],
                               decoration: const InputDecoration(
                                 labelText: 'New password',
@@ -555,7 +679,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _confirmPassword,
+                              readOnly: _busy,
                               obscureText: true,
+                              onChanged: (_) => setState(() {}),
                               autofillHints: const [AutofillHints.newPassword],
                               textInputAction: TextInputAction.done,
                               decoration: const InputDecoration(

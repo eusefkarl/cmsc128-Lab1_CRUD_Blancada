@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -112,13 +114,126 @@ void main() {
     );
     expect(find.widgetWithText(TextFormField, 'New password'), findsNothing);
     expect(
+      find.widgetWithText(TextFormField, 'New email address'),
+      findsNothing,
+    );
+    expect(find.text('Current email address'), findsOneWidget);
+    expect(find.text('Send verification email'), findsNothing);
+  });
+
+  testWidgets('back asks before discarding a changed display name', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService();
+    await _pumpProfileRoute(tester, service);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Display name'),
+      'Unsent name',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<PopScope>(
+            find.byWidgetPredicate((widget) => widget is PopScope),
+          )
+          .canPop,
+      isFalse,
+    );
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard unsaved changes?'), findsOneWidget);
+    await tester.tap(find.text('Stay'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unsent name'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open profile'), findsOneWidget);
+  });
+
+  testWidgets('logout asks before losing unsaved password entries', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService();
+    await _pumpProfileRoute(tester, service);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'New password'),
+      'unsaved-password',
+    );
+    await tester.ensureVisible(find.text('Log out'));
+    await tester.tap(find.text('Log out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard unsaved changes?'), findsOneWidget);
+    expect(service.logoutCount, 0);
+    await tester.tap(find.text('Stay'));
+    await tester.pumpAndSettle();
+    expect(service.logoutCount, 0);
+    await tester.tap(find.text('Log out'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(service.logoutCount, 1);
+  });
+
+  testWidgets('saving display name shows progress and blocks resubmission', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService()
+      ..saveCompletion = Completer<void>();
+    await _pumpProfile(tester, service);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Display name'),
+      'Next name',
+    );
+    await tester.tap(find.text('Save display name'));
+    await tester.pump();
+    expect(find.text('Saving display name…'), findsOneWidget);
+    expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Send verification email'),
+            find.widgetWithText(FilledButton, 'Save display name'),
           )
           .onPressed,
       isNull,
     );
+    service.saveCompletion!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Display name updated.'), findsOneWidget);
+  });
+
+  testWidgets('requested email verification is not an unsaved draft', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService();
+    await _pumpProfileRoute(tester, service);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'New email address'),
+      'pending@example.test',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Current password').first,
+      'current-password',
+    );
+    await tester.tap(find.text('Send verification email'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard unsaved changes?'), findsNothing);
+    expect(find.text('Open profile'), findsOneWidget);
+  });
+
+  testWidgets('an unauthenticated profile shows no account data', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService()..signedOut = true;
+    await _pumpProfile(tester, service);
+    expect(find.text('Sign in to view your profile.'), findsOneWidget);
+    expect(find.text('player@example.test'), findsNothing);
+    expect(find.text('Account details'), findsNothing);
   });
 
   testWidgets(
@@ -158,6 +273,33 @@ Future<void> _pumpProfile(
   await tester.pumpAndSettle();
 }
 
+Future<void> _pumpProfileRoute(
+  WidgetTester tester,
+  FakeProfileAuthService service,
+) async {
+  await tester.binding.setSurfaceSize(const Size(900, 1100));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ProfileScreen(auth: service),
+              ),
+            ),
+            child: const Text('Open profile'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Open profile'));
+  await tester.pumpAndSettle();
+}
+
 class FakeProfileAuthService implements ProfileAuthService {
   FakeProfileAuthService({bool hasPasswordProvider = true})
     : account = AuthAccountSnapshot(
@@ -171,16 +313,20 @@ class FakeProfileAuthService implements ProfileAuthService {
   String? pendingEmail;
   String? lastNewPassword;
   int passwordChanges = 0;
+  int logoutCount = 0;
+  bool signedOut = false;
+  Completer<void>? saveCompletion;
 
   @override
-  AuthAccountSnapshot get currentAccount => account;
+  AuthAccountSnapshot? get currentAccount => signedOut ? null : account;
 
   @override
-  Future<AuthAccountSnapshot> refreshAndSyncCurrentUserProfile() async =>
-      account;
+  Future<AuthAccountSnapshot?> refreshAndSyncCurrentUserProfile() async =>
+      signedOut ? null : account;
 
   @override
   Future<void> updateDisplayName(String displayName) async {
+    await saveCompletion?.future;
     account = AuthAccountSnapshot(
       uid: account.uid,
       email: account.email,
@@ -207,7 +353,9 @@ class FakeProfileAuthService implements ProfileAuthService {
   }
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    logoutCount += 1;
+  }
 }
 
 class FakePasswordRecoveryService implements PasswordRecoveryService {

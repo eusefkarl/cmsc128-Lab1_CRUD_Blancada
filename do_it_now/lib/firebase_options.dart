@@ -15,6 +15,16 @@ import 'package:flutter/foundation.dart'
 /// );
 /// ```
 class DefaultFirebaseOptions {
+  static String _requiredApiKey(String value, String name) {
+    if (value.trim().isEmpty || value.startsWith('YOUR_')) {
+      throw StateError(
+        'Missing $name. Run or build with --dart-define-from-file=.env '
+        'after copying .env.example to .env.',
+      );
+    }
+    return value;
+  }
+
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       return web;
@@ -46,8 +56,11 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyC4jQcaIpi7XWvn9YjOtXs7Gzk9ouVyl0E',
+  static FirebaseOptions get web => FirebaseOptions(
+    apiKey: _requiredApiKey(
+      const String.fromEnvironment('FIREBASE_WEB_API_KEY'),
+      'FIREBASE_WEB_API_KEY',
+    ),
     appId: '1:350109597967:web:4b3545de98d13ed07dbe7a',
     messagingSenderId: '350109597967',
     projectId: 'doitnow-c26f9',
@@ -56,8 +69,11 @@ class DefaultFirebaseOptions {
     measurementId: 'G-MT93T320SY',
   );
 
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDqz_TB4MmgC05rfe9fdbD5IBu42LTKpkE',
+  static FirebaseOptions get macos => FirebaseOptions(
+    apiKey: _requiredApiKey(
+      const String.fromEnvironment('FIREBASE_MACOS_API_KEY'),
+      'FIREBASE_MACOS_API_KEY',
+    ),
     appId: '1:350109597967:ios:c166c02f64fc0a4a7dbe7a',
     messagingSenderId: '350109597967',
     projectId: 'doitnow-c26f9',
@@ -65,8 +81,11 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.example.doItNow',
   );
 
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyC4jQcaIpi7XWvn9YjOtXs7Gzk9ouVyl0E',
+  static FirebaseOptions get windows => FirebaseOptions(
+    apiKey: _requiredApiKey(
+      const String.fromEnvironment('FIREBASE_WINDOWS_API_KEY'),
+      'FIREBASE_WINDOWS_API_KEY',
+    ),
     appId: '1:350109597967:web:82dbfafef506ef5d7dbe7a',
     messagingSenderId: '350109597967',
     projectId: 'doitnow-c26f9',
