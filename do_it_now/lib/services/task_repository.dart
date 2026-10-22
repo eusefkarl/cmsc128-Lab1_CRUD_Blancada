@@ -17,11 +17,29 @@ class FirestoreTaskRepository implements TaskRepository {
   FirestoreTaskRepository({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
-  })  : _tasks = (firestore ?? FirebaseFirestore.instance).collection('tasks'),
-        _auth = auth ?? FirebaseAuth.instance;
+    String? listId,
+  }) : _tasks = (firestore ?? FirebaseFirestore.instance).collection('tasks'),
+       _auth = auth ?? FirebaseAuth.instance,
+       _listId = listId {
+    _uid = _currentUser.uid;
+    if (listId != null) {
+      _tasks = (firestore ?? FirebaseFirestore.instance)
+          .collection('collaborativeLists')
+          .doc(listId)
+          .collection('tasks');
+    }
+  }
 
-  final CollectionReference<Map<String, dynamic>> _tasks;
+  CollectionReference<Map<String, dynamic>> _tasks;
   final FirebaseAuth _auth;
+  final String? _listId;
+  late final String _uid;
+
+  void _checkAccount() {
+    if (_currentUser.uid != _uid) {
+      throw StateError('This account session has ended.');
+    }
+  }
 
   User get _currentUser {
     final user = _auth.currentUser;
@@ -32,24 +50,28 @@ class FirestoreTaskRepository implements TaskRepository {
   }
 
   @override
-  Stream<List<Task>> watchTasks() => _tasks
-      .where('ownerId', isEqualTo: _currentUser.uid)
-      .snapshots()
-      .map((snapshot) {
-    final tasks = snapshot.docs.map(Task.fromFirestore).toList();
-    tasks.sort((first, second) {
-      if (first.isDone != second.isDone) return first.isDone ? 1 : -1;
-      if (first.dueDate == null && second.dueDate == null) return 0;
-      if (first.dueDate == null) return 1;
-      if (second.dueDate == null) return -1;
-      return first.dueDate!.compareTo(second.dueDate!);
-    });
-    return tasks;
+  Stream<List<Task>> watchTasks() {
+    _checkAccount();
+    final Query<Map<String, dynamic>> query = _listId == null
+        ? _tasks.where('ownerId', isEqualTo: _uid)
+        : _tasks;
+    return query.snapshots().map((snapshot) {
+      final tasks = snapshot.docs.map(Task.fromFirestore).toList();
+      tasks.sort((first, second) {
+        if (first.isDone != second.isDone) return first.isDone ? 1 : -1;
+        if (first.dueDate == null && second.dueDate == null) return 0;
+        if (first.dueDate == null) return 1;
+        if (second.dueDate == null) return -1;
+        return first.dueDate!.compareTo(second.dueDate!);
       });
+      return tasks;
+    });
+  }
 
   @override
   Future<void> createTask(Task task) async {
-    task.ownerId = _currentUser.uid;
+    _checkAccount();
+    task.ownerId = _uid;
     final document = await _tasks.add(task.toFirestore());
     task.id = document.id;
   }
@@ -57,14 +79,16 @@ class FirestoreTaskRepository implements TaskRepository {
   @override
   Future<void> updateTask(Task task) {
     final id = task.id;
+    _checkAccount();
     if (id == null) throw StateError('Cannot update a task without an ID.');
-    task.ownerId = _currentUser.uid;
-    return _tasks.doc(id).set(task.toFirestore());
+    // Shared tasks retain their original creator when another member edits.
+    return _tasks.doc(id).update(task.toFirestore());
   }
 
   @override
   Future<void> deleteTask(Task task) {
     final id = task.id;
+    _checkAccount();
     if (id == null) throw StateError('Cannot delete a task without an ID.');
     return _tasks.doc(id).delete();
   }

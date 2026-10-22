@@ -19,6 +19,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   late TaskPriority _priority;
   late TaskCategory _category;
   bool _titleError = false;
+  final Set<DialogRoute<dynamic>> _pickerRoutes = {};
 
   @override
   void initState() {
@@ -33,6 +34,11 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
 
   @override
   void dispose() {
+    for (final route in _pickerRoutes.toList()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (route.isActive) route.navigator?.removeRoute(route);
+      });
+    }
     _titleController.dispose();
     _detailsController.dispose();
     super.dispose();
@@ -58,21 +64,38 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   }
 
   Future<void> _selectDueDate() async {
-    final selectedDate = await showDatePicker(
-      context: context,
-      initialDate: _dueDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
+    final today = DateUtils.dateOnly(DateTime.now());
+    final selectedDate = await _showPicker<DateTime>(
+      (_) => DatePickerDialog(
+        initialDate: _dueDate ?? today,
+        firstDate: _dueDate != null && _dueDate!.isBefore(today)
+            ? _dueDate!
+            : today,
+        lastDate: DateTime(2100),
+      ),
     );
-    if (selectedDate != null) setState(() => _dueDate = selectedDate);
+    if (mounted && selectedDate != null) {
+      setState(() => _dueDate = selectedDate);
+    }
   }
 
   Future<void> _selectDueTime() async {
-    final selectedTime = await showTimePicker(
-      context: context,
-      initialTime: _dueTime ?? TimeOfDay.now(),
+    final selectedTime = await _showPicker<TimeOfDay>(
+      (_) => TimePickerDialog(initialTime: _dueTime ?? TimeOfDay.now()),
     );
-    if (selectedTime != null) setState(() => _dueTime = selectedTime);
+    if (mounted && selectedTime != null) {
+      setState(() => _dueTime = selectedTime);
+    }
+  }
+
+  Future<T?> _showPicker<T>(WidgetBuilder builder) async {
+    final route = DialogRoute<T>(context: context, builder: builder);
+    _pickerRoutes.add(route);
+    try {
+      return await Navigator.of(context).push(route);
+    } finally {
+      _pickerRoutes.remove(route);
+    }
   }
 
   String _formatDate(BuildContext context, DateTime date) =>

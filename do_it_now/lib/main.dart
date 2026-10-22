@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
-import 'screens/task_home_page.dart';
+import 'screens/collaborative_workspace.dart';
 import 'services/auth_service.dart';
 
 Future<void> main() async {
@@ -24,6 +25,8 @@ Future<void> main() async {
   if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
     await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
     FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
+    FirebaseFunctions.instanceFor(region: 'us-central1')
+        .useFunctionsEmulator('127.0.0.1', 5001);
   }
   runApp(const MyApp());
 }
@@ -127,7 +130,7 @@ class AuthGate extends StatelessWidget {
           ? const AuthScreen()
           : _ProfileSyncGate(
               key: ValueKey(user.uid),
-              child: const TaskHomePage(),
+              child: const CollaborativeWorkspace(),
             );
     },
   );
