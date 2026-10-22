@@ -1,5 +1,7 @@
 # Do It Now!
 
+> Activity 3: the current setup, collaborative-list schema, access rules, emulator instructions, and repository-history notes are in [the application README](do_it_now/README.md#activity-3-user-based-access-control-and-collaborative-lists). Run application commands from the `do_it_now` directory.
+
 A Flutter task-management app with a game HUD-inspired interface. Tasks support due dates, due times, priorities, categories, completion state, sorting, filtering, undo deletion, and Firestore persistence.
 
 ## Tech Stack
