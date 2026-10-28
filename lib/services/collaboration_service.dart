@@ -1,36 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/collaborative_list.dart';
 import 'task_repository.dart';
 
+const _maxMembers = 20;
+final _memberIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+
 abstract interface class CollaborationService {
   String get uid;
-  bool get emailVerified;
   Future<void> ensureDefaultList();
   Stream<List<CollaborativeList>> watchLists();
   TaskRepository tasksFor(String? listId);
-  Future<String> addMember(String listId, String email);
-  Future<void> sendVerification();
-  Future<bool> refreshVerification();
+  Future<String> addMember(String listId, String memberUid);
 }
 
 class FirebaseCollaborationService implements CollaborationService {
   FirebaseCollaborationService({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
-    FirebaseFunctions? functions,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _auth = auth ?? FirebaseAuth.instance,
-       _functions =
-           functions ?? FirebaseFunctions.instanceFor(region: 'us-central1') {
+       _auth = auth ?? FirebaseAuth.instance {
     uid = _auth.currentUser!.uid;
   }
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
-  final FirebaseFunctions _functions;
   @override
   late final String uid;
 
@@ -39,10 +34,6 @@ class FirebaseCollaborationService implements CollaborationService {
       throw StateError('This account session has ended.');
     }
   }
-
-  @override
-  bool get emailVerified =>
-      _auth.currentUser?.uid == uid && _auth.currentUser!.emailVerified;
 
   @override
   Future<void> ensureDefaultList() async {
@@ -90,29 +81,38 @@ class FirebaseCollaborationService implements CollaborationService {
   );
 
   @override
-  Future<String> addMember(String listId, String email) async {
+  Future<String> addMember(String listId, String memberUid) async {
     _checkAccount();
-    await _auth.currentUser!.getIdToken(true);
-    _checkAccount();
-    final result = await _functions.httpsCallable('addListMember').call({
-      'listId': listId,
-      'email': email.trim(),
+    final cleaned = memberUid.trim();
+    if (!_memberIdPattern.hasMatch(cleaned)) {
+      throw const FormatException('Enter a valid account UID.');
+    }
+    if (cleaned == uid) return 'already-member';
+
+    final document = _firestore.collection('collaborativeLists').doc(listId);
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(document);
+      if (!snapshot.exists || snapshot.data()?['ownerId'] != uid) {
+        throw StateError('You must own this list to add members.');
+      }
+      final storedMembers = snapshot.data()!['memberIds'];
+      if (storedMembers is! List ||
+          storedMembers.any((member) => member is! String)) {
+        throw StateError('This list has invalid membership data.');
+      }
+      final members = storedMembers.cast<String>();
+      if (!members.contains(uid)) {
+        throw StateError('This list has invalid membership data.');
+      }
+      if (members.contains(cleaned)) return 'already-member';
+      if (members.length >= _maxMembers) {
+        throw StateError('This list already has $_maxMembers members.');
+      }
+      transaction.update(document, {
+        'memberIds': [...members, cleaned],
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return 'added';
     });
-    return (result.data as Map)['status'] as String;
-  }
-
-  @override
-  Future<void> sendVerification() async {
-    _checkAccount();
-    await _auth.currentUser!.sendEmailVerification();
-  }
-
-  @override
-  Future<bool> refreshVerification() async {
-    _checkAccount();
-    await _auth.currentUser!.reload();
-    _checkAccount();
-    await _auth.currentUser!.getIdToken(true);
-    return emailVerified;
   }
 }

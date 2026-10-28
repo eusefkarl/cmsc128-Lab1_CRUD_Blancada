@@ -505,6 +505,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
+                            initialValue: user.uid,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Account UID',
+                              helperText:
+                                  'Share this UID with a list owner so they can add you.',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
                             controller: _name,
                             readOnly: _busy,
                             autofillHints: const [AutofillHints.name],

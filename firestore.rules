@@ -14,6 +14,7 @@ service cloud.firestore {
           && data.ownerId is string
           && data.name is string && data.name.size() > 0 && data.name.size() <= 100
           && data.memberIds is list && data.memberIds.size() > 0 && data.memberIds.size() <= 20
+          && data.memberIds.toSet().size() == data.memberIds.size()
           && data.ownerId in data.memberIds
           && data.createdAt is timestamp && data.updatedAt is timestamp;
       }
@@ -27,11 +28,13 @@ service cloud.firestore {
         || (request.auth != null && listId == request.auth.uid
             && !exists(/databases/$(database)/documents/collaborativeLists/$(listId)));
       allow list: if listMember();
+      // Only the owner may rename the list or change its member UIDs directly.
       allow update: if request.auth != null
         && resource.data.ownerId == request.auth.uid
         && validList(request.resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt']);
-      // Membership is changed only by the authenticated Admin callable.
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberIds', 'updatedAt']);
       allow delete: if false;
 
       match /tasks/{taskId} {

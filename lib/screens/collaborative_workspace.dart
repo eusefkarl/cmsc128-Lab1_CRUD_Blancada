@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../models/collaborative_list.dart';
@@ -236,14 +235,14 @@ class _AddMemberDialog extends StatefulWidget {
 }
 
 class _AddMemberDialogState extends State<_AddMemberDialog> {
-  final _email = TextEditingController();
+  final _memberUid = TextEditingController();
   final _form = GlobalKey<FormState>();
   bool _busy = false;
   String? _message;
 
   @override
   void dispose() {
-    _email.dispose();
+    _memberUid.dispose();
     super.dispose();
   }
 
@@ -255,13 +254,10 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     try {
       final message = await action();
       if (mounted) setState(() => _message = message);
-    } on FirebaseFunctionsException catch (error) {
-      if (mounted) {
-        setState(
-          () => _message =
-              error.message ?? 'Could not add this member. Try again.',
-        );
-      }
+    } on StateError catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _message = error.message);
     } catch (_) {
       if (mounted) {
         setState(() => _message = 'Could not complete the request. Try again.');
@@ -284,44 +280,19 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Use the email of a registered account. Members can create, edit and delete tasks in this list.',
+                'Enter the account UID of a registered user. Find it in their Profile tab under Account details. Members can create, edit and delete tasks in this list.',
               ),
-              if (!widget.service.emailVerified) ...[
-                const SizedBox(height: 12),
-                const Text('Verify your own email before adding members.'),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _perform(() async {
-                          await widget.service.sendVerification();
-                          return 'Verification email sent. Open its link, then check verification.';
-                        }),
-                  child: const Text('Send verification email'),
-                ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _perform(() async {
-                          return await widget.service.refreshVerification()
-                              ? 'Email verified. You can now add a member.'
-                              : 'Email is not verified yet. Open the emailed link first.';
-                        }),
-                  child: const Text('Check verification'),
-                ),
-              ],
               const SizedBox(height: 12),
               TextFormField(
-                controller: _email,
+                controller: _memberUid,
                 enabled: !_busy,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Registered email',
-                ),
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Account UID'),
                 validator: (value) =>
-                    RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                    RegExp(r'^[A-Za-z0-9_-]{1,128}$')
                         .hasMatch(value?.trim() ?? '')
                     ? null
-                    : 'Enter a valid email address.',
+                    : 'Enter a valid account UID.',
               ),
               if (_busy)
                 const Padding(
@@ -344,14 +315,14 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         child: const Text('Close'),
       ),
       FilledButton(
-        onPressed: _busy || !widget.service.emailVerified
+        onPressed: _busy
             ? null
             : () {
                 if (!_form.currentState!.validate()) return;
                 _perform(() async {
                   final result = await widget.service.addMember(
                     widget.listId,
-                    _email.text,
+                    _memberUid.text,
                   );
                   return result == 'already-member'
                       ? 'This account is already a member.'
