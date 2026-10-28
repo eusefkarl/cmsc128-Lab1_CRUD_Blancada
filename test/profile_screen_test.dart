@@ -49,6 +49,16 @@ void main() {
     expect(service.account.email, 'player@example.test');
   });
 
+  testWidgets('account details show the UID used for invitations', (
+    tester,
+  ) async {
+    final service = FakeProfileAuthService();
+    await _pumpProfile(tester, service);
+
+    expect(find.widgetWithText(TextFormField, 'Account UID'), findsOneWidget);
+    expect(find.text('test-user'), findsOneWidget);
+  });
+
   testWidgets(
     'password change requires matching confirmation and clears on success',
     (tester) async {

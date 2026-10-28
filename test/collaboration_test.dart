@@ -62,9 +62,6 @@ class FakeCollaboration implements CollaborationService {
   FakeCollaboration(this.uid);
   @override
   final String uid;
-  @override
-  bool emailVerified = true;
-  int verificationSent = 0;
   final membersAdded = <String>[];
   final lists = StreamController<List<CollaborativeList>>.broadcast();
   final scopes = <String, ScopeTasks>{};
@@ -80,15 +77,10 @@ class FakeCollaboration implements CollaborationService {
     () => ScopeTasks('$uid-${listId ?? 'personal'}'),
   );
   @override
-  Future<String> addMember(String listId, String email) async {
-    membersAdded.add('$listId:$email');
+  Future<String> addMember(String listId, String memberUid) async {
+    membersAdded.add('$listId:$memberUid');
     return 'added';
   }
-
-  @override
-  Future<void> sendVerification() async => verificationSent++;
-  @override
-  Future<bool> refreshVerification() async => emailVerified = true;
 
   List<CollaborativeList> get groups => [
     CollaborativeList(
@@ -290,10 +282,8 @@ void main() {
     );
   }
 
-  testWidgets('unverified owners can verify and invite by registered email', (
-    tester,
-  ) async {
-    final service = FakeCollaboration('a')..emailVerified = false;
+  testWidgets('owners can invite a member by account UID', (tester) async {
+    final service = FakeCollaboration('a');
     addTearDown(service.close);
     await tester.pumpWidget(
       MaterialApp(home: CollaborativeWorkspace(service: service)),
@@ -304,24 +294,13 @@ void main() {
     await selectList(tester, 'Own group · Owned');
     await tester.tap(find.text('Add member'));
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Add member'))
-          .onPressed,
-      isNull,
-    );
-    await tester.tap(find.text('Send verification email'));
-    await tester.pumpAndSettle();
-    expect(service.verificationSent, 1);
-    await tester.tap(find.text('Check verification'));
-    await tester.pumpAndSettle();
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Registered email'),
-      'member@example.com',
+      find.widgetWithText(TextFormField, 'Account UID'),
+      'member-uid',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Add member'));
     await tester.pumpAndSettle();
-    expect(service.membersAdded, ['a:member@example.com']);
+    expect(service.membersAdded, ['a:member-uid']);
     expect(find.text('Member added.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
