@@ -254,31 +254,31 @@ Each account has a deterministic default collaborative list. Initialization is i
 | Read or change `tasks/{taskId}` | Denied | Own tasks only | Own personal tasks only | Own personal tasks only | Denied |
 | Read a collaborative list and its tasks | Denied | If a current member | Allowed | Allowed | Denied, including guessed IDs |
 | Create, update, or delete a collaborative task | Denied | If a current member | Allowed; creator `ownerId` stays immutable | Allowed; creator `ownerId` stays immutable | Denied |
-| Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; membership changes use the callable function | Denied |
+| Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; UID membership is updated directly under Firestore rules | Denied |
 
-Only the list owner may add a member, and the owner cannot be removed. Membership is changed through the authenticated `addListMember` callable function, which accepts `{listId, email}` and resolves a registered email to its UID on the server. The caller must have a verified email and own the list. The function returns only a result (`added` or `already-member`) and the member count, not a user profile. Membership is capped at 20 UIDs, including the owner. Firestore clients cannot edit `memberIds` directly.
+Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which is shown in that account's **Profile -> Account details** panel. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
 
 ### Emulator setup and checks
 
-Authentication, Firestore, and Functions emulators are configured in `firebase.json`. The server targets Node.js 22; install it alongside the Firebase CLI and a Java runtime for Firestore emulation. Install the server dependencies, then start all three emulators when exercising member invitations:
+The Authentication and Firestore emulators are configured in `firebase.json`. Install Node.js alongside the Firebase CLI and a Java runtime for Firestore emulation. The root `package.json` contains only local emulator test tooling and is not deployed. Install its dependencies, then start both emulators:
 
 ```powershell
-npm ci --prefix functions
-firebase emulators:start --only auth,firestore,functions --project doitnow-c26f9 --import=.firebase-emulator-data --export-on-exit=.firebase-emulator-data
+npm ci
+firebase emulators:start --only auth,firestore --project doitnow-c26f9 --import=.firebase-emulator-data --export-on-exit=.firebase-emulator-data
 ```
 
-Run the app with `flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true`. This connects Auth, Firestore, and the `us-central1` callable to their local emulators. A fresh emulator run can omit `--import`; stop the emulators normally to write the export. Emulator data is local and does not represent production records. The emulator UI is available at `http://127.0.0.1:4000` when enabled; use its Authentication and Firestore views to inspect test accounts, list membership, and task documents.
+Run the app with `flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true`. This connects Auth and Firestore to their local emulators. A fresh emulator run can omit `--import`; stop the emulators normally to write the export. Emulator data is local and does not represent production records. The emulator UI is available at `http://127.0.0.1:4000` when enabled; use its Authentication and Firestore views to inspect test accounts, list membership, and task documents.
 
 For automated checks with a fresh emulator instance (stop any existing emulators first):
 
 ```powershell
-firebase emulators:exec --only auth,firestore,functions --project doitnow-c26f9 "node --test scripts/account_compliance.test.mjs scripts/ubac_emulator.test.mjs"
+firebase emulators:exec --only auth,firestore --project doitnow-c26f9 "node --test scripts/account_compliance.test.mjs scripts/ubac_emulator.test.mjs"
 flutter analyze
 flutter test
 flutter build web --dart-define-from-file=.env
 ```
 
-The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, membership tampering, invitation quotas, and access revocation. Widget tests exercise list switching and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
+The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, owner-only UID membership changes, duplicate and capacity limits, and access revocation. Widget tests exercise list switching, UID invitations, and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
 
 To check backend restart persistence independently, use a fresh export directory containing only synthetic data:
 
@@ -287,26 +287,21 @@ firebase emulators:exec --only auth,firestore --project doitnow-c26f9 --export-o
 firebase emulators:exec --only auth,firestore --project doitnow-c26f9 --import=.firebase-emulator-data/ubac-restart "node scripts/ubac_persistence.mjs verify"
 ```
 
-The second command verifies login and restored list membership, task data, and invitation quota after a separate emulator process starts. Do not run the seed against an imported copy of the same fixture.
+The second command verifies login and restored list membership and task data after a separate emulator process starts. Do not run the seed against an imported copy of the same fixture.
 
-Local validation on October 23, 2026: 25 Flutter tests passed, analysis reported no issues, the release web build passed, and all 11 account/UBAC emulator tests passed. The separate export/import restart check passed. `npm audit --omit=dev` reported zero vulnerabilities. Server emulator checks used the installed Node.js 24.19 runtime; execution on the configured deployment runtime, Node.js 22, remains to be verified. These results do not establish production deployment or a manual two-account browser demonstration.
+### Deploying on the Spark plan
 
-### Cloud Functions setup and deployment
-
-Email-to-UID lookup must stay on the server. Do not make `users` publicly searchable, put Admin SDK credentials in Flutter, or commit service-account keys. Cloud Functions deployment requires the Firebase project to meet the current Cloud Functions billing and runtime requirements. Check the project's plan and budget controls before deploying; the Firebase documentation describes the [pricing plans](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans) and [callable functions](https://firebase.google.com/docs/functions/callable).
-
-This implementation has not been deployed during this work. A read-only Cloud Functions listing attempt failed, so the deployed state could not be confirmed; the project's billing capability is also unconfirmed. Treat the callable feature as local/emulator work until the project plan is confirmed and deployment is verified.
-
-Install dependencies with `npm ci --prefix functions` and test against the local emulators. Deploy only after verifying the target project and the function behavior:
+The app and its Firestore rules can be deployed without Cloud Functions. Invitations are UID-based and write directly to `memberIds`, so the project can stay on Firebase's free Spark plan subject to its Firestore quotas. Deploy only the rules and the Flutter build:
 
 ```powershell
-firebase deploy --only functions:addListMember --project doitnow-c26f9
+firebase deploy --only firestore:rules --project doitnow-c26f9
+flutter build web --dart-define-from-file=.env
 ```
 
-The rules and any required Firestore indexes also need deployment to the intended project. Function deployment is a separate operation from running the Flutter app; a local implementation or emulator pass does not mean the production function has been deployed. Confirm deployment in Firebase Console and run a two-account check against the deployed project before describing it as live.
+Host the built web app on Firebase Hosting or another static host. Do not run `firebase deploy --only functions`; there is no Functions source or configuration left in this project. The trade-off is that there is no email-to-UID lookup, so each person must share the UID shown in their **Profile -> Account details** panel with the list owner before being added.
 
 ### Demo and repository history
 
-Prepare two accounts by registering through the app. Add three to five personal tasks to each account, then add the second registered account to the first account's collaborative list. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
+Prepare two accounts by registering through the app. Add three to five personal tasks to each account. Sign in as the second account, copy the UID from **Profile -> Account details**, then sign in as the first account and add that UID to its collaborative list. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
 
 The Activity 3 working branch is `act3-ubac`, created from `main` at `45b1e7d`. The authentication work was already present in the branch's history: merging `auth` reported that it was already up to date, so this activity did not create another auth merge or produce merge conflicts. The repository also contains the earlier historical merge commit `6f65f96` (`Merge PR #1 dev`). This records the history observed for this activity; it does not claim a new pull request or merge.

@@ -3,16 +3,15 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 // This suite deliberately refuses nonlocal endpoints. No production credentials
-// or deployed service is needed; start Auth, Firestore and Functions emulators.
-const require = createRequire(new URL('../functions/package.json', import.meta.url));
+// or deployed service is needed; start the Auth and Firestore emulators.
+const require = createRequire(new URL('../package.json', import.meta.url));
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const { getFirestore } = require('firebase-admin/firestore');
 const project = process.env.GCLOUD_PROJECT || 'doitnow-c26f9';
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
-const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST || '127.0.0.1:5001';
-for (const host of [authHost, firestoreHost, functionsHost]) {
+for (const host of [authHost, firestoreHost]) {
   assert.match(host, /^(127\.0\.0\.1|localhost):\d+$/, 'Only loopback emulators are allowed.');
 }
 process.env.FIREBASE_AUTH_EMULATOR_HOST = authHost;
@@ -24,9 +23,9 @@ const documentBase = `http://${firestoreHost}/v1/projects/${project}/databases/(
 const password = 'Synthetic-test-password-123!';
 let sequence = 0;
 
-async function account(label, verified = true) {
+async function account(label) {
   const email = `${label}-${Date.now()}-${sequence++}@example.test`;
-  const created = await adminAuth.createUser({ email, password, emailVerified: verified });
+  const created = await adminAuth.createUser({ email, password, emailVerified: true });
   return { uid: created.uid, email, ...(await signIn(email)) };
 }
 async function signIn(email) {
@@ -61,17 +60,6 @@ async function write(path, actor, data) { return rest('PATCH', `/${path}`, actor
 async function read(path, actor) { return rest('GET', `/${path}`, actor); }
 async function denied(result) { assert.equal((await result).status, 403); }
 async function ok(result) { assert.equal((await result).status, 200); }
-async function call(actor, data) {
-  const response = await fetch(`http://${functionsHost}/${project}/us-central1/addListMember`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(actor ? { authorization: `Bearer ${actor.token}` } : {}) },
-    body: JSON.stringify({ data }),
-  });
-  return response.json();
-}
-async function callError(actor, data, status) {
-  assert.equal((await call(actor, data)).error?.status, status);
-}
 function task(uid, overrides = {}) {
   return { ownerId: uid, title: 'Synthetic task', details: '', createdAt: new Date('2026-01-01T00:00:00Z'),
     dueDate: null, dueTime: null, priority: 'medium', category: 'school', isDone: false, ...overrides };
@@ -79,18 +67,25 @@ function task(uid, overrides = {}) {
 function list(uid, overrides = {}) {
   return { ownerId: uid, name: 'My group', memberIds: [uid], createdAt: new Date(), updatedAt: new Date(), ...overrides };
 }
+async function updateList(path, actor, overrides = {}) {
+  const saved = (await adminDb.doc(path).get()).data();
+  return write(path, actor, {
+    ...saved,
+    createdAt: saved.createdAt.toDate(),
+    updatedAt: saved.updatedAt.toDate(),
+    ...overrides,
+  });
+}
 function query(collectionId, where) {
   return { structuredQuery: { from: [{ collectionId }], ...(where ? { where } : {}) } };
 }
 function filter(fieldPath, op, input) { return { fieldFilter: { field: { fieldPath }, op, value: value(input) } }; }
 
-test('personal UBAC, collaborative rules and callable adversarial acceptance', { timeout: 180000 }, async (t) => {
+test('personal UBAC and collaborative membership rules', { timeout: 180000 }, async (t) => {
   const a = await account('owner');
   const b = await account('member');
   const c = await account('outsider');
-  const d = await account('capacity-one');
-  const e = await account('capacity-two');
-  const unverified = await account('unverified', false);
+  const d = await account('extra-one');
   const personal = `tasks/${a.uid}-personal`;
   const aList = `collaborativeLists/${a.uid}`;
   const bList = `collaborativeLists/${b.uid}`;
@@ -126,42 +121,35 @@ test('personal UBAC, collaborative rules and callable adversarial acceptance', {
       `/collaborativeLists/${actor.uid}?currentDocument.exists=false`, actor, fields(list(actor.uid)))));
     assert.deepEqual(initializations.map((entry) => entry.status).sort(), [200, 409]);
     await ok(read(`collaborativeLists/${d.uid}`, d));
-    await denied(write(`collaborativeLists/${c.uid}`, c, list(c.uid, { memberIds: [c.uid, a.uid] })));
+    await denied(write(aList, b, list(b.uid)));
     await denied(write(`collaborativeLists/forged-${a.uid}`, a, list(a.uid)));
-    await denied(write(aList, a, list(b.uid)));
-    await denied(write(aList, a, list(a.uid, { memberIds: [a.uid, b.uid] })));
-    const saved = (await adminDb.doc(aList).get()).data();
-    await ok(write(aList, a, { ...saved, createdAt: saved.createdAt.toDate(), updatedAt: new Date(), name: 'Renamed group' }));
+    await denied(updateList(aList, a, { ownerId: b.uid }));
+    await denied(updateList(aList, a, { memberIds: [b.uid] }));
+    await denied(updateList(aList, a, { memberIds: [a.uid, a.uid] }));
+    await ok(updateList(aList, a, { name: 'Renamed group' }));
     await denied(rest('DELETE', `/${aList}`, a));
     await denied(rest('POST', ':runQuery', a, query('collaborativeLists')));
     await ok(rest('POST', ':runQuery', a, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', a.uid))));
   });
 
-  await t.test('callable authenticates, verifies, validates and checks owner before lookup', async () => {
-    await callError(null, { listId: a.uid, email: b.email }, 'UNAUTHENTICATED');
-    await callError(unverified, { listId: a.uid, email: b.email }, 'FAILED_PRECONDITION');
-    await callError(b, { listId: a.uid, email: 'missing@example.test' }, 'PERMISSION_DENIED');
-    await callError(c, { listId: 'missing', email: a.email }, 'PERMISSION_DENIED');
-    for (const input of [{ listId: '../users', email: b.email }, { listId: a.uid, email: 'bad' },
-      { listId: a.uid, email: b.email, ownerId: a.uid }, null]) {
-      await callError(a, input, 'INVALID_ARGUMENT');
-    }
-    await callError(a, { listId: a.uid, email: 'missing@example.test' }, 'NOT_FOUND');
-    assert.equal((await call(a, { listId: a.uid, email: a.email })).result?.status, 'already-member');
-    const results = await Promise.all(Array.from({ length: 3 }, () => call(a, { listId: a.uid, email: b.email })));
-    assert.equal(results.filter((entry) => entry.result?.status === 'added').length, 1);
-    assert.equal(results.filter((entry) => entry.result?.status === 'already-member').length, 2);
-    assert.deepEqual((await adminDb.doc(aList).get()).data().memberIds, [a.uid, b.uid]);
-    await denied(read(`users/${b.uid}`, a));
-    await denied(read(`_invitationLimits/${a.uid}`, a));
-    await denied(write(`_invitationLimits/${a.uid}`, a, { count: 0 }));
+  await t.test('owners add and remove members by UID under Firestore rules', async () => {
+    await denied(read(aList, b));
+    await ok(updateList(aList, a, { memberIds: [a.uid, b.uid] }));
+    await ok(read(aList, b));
+    await ok(rest('POST', ':runQuery', b, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', b.uid))));
+    await denied(updateList(aList, b, { memberIds: [a.uid, b.uid, c.uid] }));
+    await denied(updateList(aList, b, { name: 'Hijacked' }));
+    await denied(read(aList, c));
+    await ok(updateList(aList, a, { memberIds: [a.uid] }));
+    await denied(read(aList, b));
+    await ok(updateList(aList, a, { memberIds: [a.uid, b.uid] }));
   });
 
   await t.test('member discovery and shared CRUD use current parent membership', async () => {
     await ok(read(aList, b));
     await denied(read(bList, a));
     await ok(rest('POST', ':runQuery', b, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', b.uid))));
-    await denied(write(aList, b, list(a.uid, { memberIds: [a.uid, b.uid], name: 'Hijacked' })));
+    await denied(updateList(aList, b, { name: 'Hijacked' }));
     await ok(write(shared, a, task(a.uid)));
     await ok(read(shared, b));
     await ok(write(shared, b, task(a.uid, { title: 'Member edit', isDone: true })));
@@ -182,7 +170,7 @@ test('personal UBAC, collaborative rules and callable adversarial acceptance', {
     await ok(write(shared, b, task(b.uid)));
     await ok(rest('DELETE', `/${shared}`, a));
     await ok(write(shared, a, task(a.uid)));
-    await adminDb.doc(aList).update({ memberIds: [a.uid] });
+    await ok(updateList(aList, a, { memberIds: [a.uid] }));
     await denied(read(aList, b));
     await denied(read(shared, b));
     await denied(write(shared, b, task(a.uid)));
@@ -190,35 +178,13 @@ test('personal UBAC, collaborative rules and callable adversarial acceptance', {
     await denied(rest('POST', `/${aList}:runQuery`, b, query('tasks')));
   });
 
-  await t.test('changed email resolves stable UID, disabled accounts cannot join', async () => {
-    const changed = `changed-${Date.now()}@example.test`;
-    await adminAuth.updateUser(b.uid, { email: changed });
-    b.email = changed;
-    assert.equal((await call(a, { listId: a.uid, email: changed })).result?.status, 'added');
-    assert.equal((await call(a, { listId: a.uid, email: changed })).result?.status, 'already-member');
-    assert.deepEqual((await adminDb.doc(aList).get()).data().memberIds, [a.uid, b.uid]);
-    await adminAuth.updateUser(c.uid, { disabled: true });
-    await callError(a, { listId: a.uid, email: c.email }, 'FAILED_PRECONDITION');
-  });
-
-  await t.test('group capacity and persisted quota cannot be bypassed', async () => {
+  await t.test('membership capacity and duplicate UIDs cannot be bypassed', async () => {
     const fullMembers = [a.uid, b.uid, ...Array.from({ length: 18 }, (_, i) => `synthetic-${i}`)];
-    await adminDb.doc(aList).update({ memberIds: fullMembers });
-    assert.equal((await call(a, { listId: a.uid, email: b.email })).result?.status, 'already-member');
-    await callError(a, { listId: a.uid, email: d.email }, 'RESOURCE_EXHAUSTED');
+    await ok(updateList(aList, a, { memberIds: fullMembers }));
+    await denied(updateList(aList, a, { memberIds: [...fullMembers, c.uid] }));
+    await denied(updateList(aList, a, { memberIds: [a.uid, a.uid] }));
     assert.equal((await adminDb.doc(aList).get()).data().memberIds.length, 20);
-    await adminDb.doc(aList).update({ memberIds: fullMembers.slice(0, 19) });
-    const additions = await Promise.all([d, e].map((actor) => call(a, { listId: a.uid, email: actor.email })));
-    assert.equal(additions.filter((entry) => entry.result?.status === 'added').length, 1);
-    assert.equal(additions.filter((entry) => entry.error?.status === 'RESOURCE_EXHAUSTED').length, 1);
-    assert.equal((await adminDb.doc(aList).get()).data().memberIds.length, 20);
-    await adminDb.doc(aList).update({ memberIds: [a.uid] });
-    await adminDb.doc(`_invitationLimits/${a.uid}`).set({ windowStart: Timestamp.now(), count: 19 });
-    const results = await Promise.all([call(a, { listId: a.uid, email: b.email }), call(a, { listId: a.uid, email: b.email })]);
-    assert.equal(results.filter((entry) => entry.result).length, 1);
-    assert.equal(results.filter((entry) => entry.error?.status === 'RESOURCE_EXHAUSTED').length, 1);
-    assert.equal((await adminDb.doc(`_invitationLimits/${a.uid}`).get()).data().count, 20);
-    await adminDb.doc(`_invitationLimits/${a.uid}`).set({ windowStart: Timestamp.fromMillis(Date.now() - 3600001), count: 20 });
-    assert.equal((await call(a, { listId: a.uid, email: b.email })).result?.status, 'already-member');
+    await ok(updateList(aList, a, { memberIds: [a.uid] }));
+    assert.deepEqual((await adminDb.doc(aList).get()).data().memberIds, [a.uid]);
   });
 });

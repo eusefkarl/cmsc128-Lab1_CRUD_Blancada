@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 for (const variable of ['FIREBASE_AUTH_EMULATOR_HOST', 'FIRESTORE_EMULATOR_HOST']) {
   assert.match(process.env[variable] || '', /^(127\.0\.0\.1|localhost):\d+$/);
 }
-const require = createRequire(new URL('../functions/package.json', import.meta.url));
+const require = createRequire(new URL('../package.json', import.meta.url));
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
@@ -19,7 +19,6 @@ const email = 'ubac-persistence@example.test';
 const password = 'Synthetic-emulator-only-123!';
 const listPath = `collaborativeLists/${uid}`;
 const taskPath = `${listPath}/tasks/persisted-task`;
-const quotaPath = `_invitationLimits/${uid}`;
 const createdAt = Timestamp.fromMillis(1767225600000);
 
 if (process.argv[2] === 'seed') {
@@ -27,8 +26,7 @@ if (process.argv[2] === 'seed') {
   await db.doc(listPath).set({ ownerId: uid, name: 'Persisted group', memberIds: [uid], createdAt, updatedAt: createdAt });
   await db.doc(taskPath).set({ ownerId: uid, title: 'Persisted task', details: '', createdAt,
     dueDate: null, dueTime: null, priority: 'medium', category: 'school', isDone: false });
-  await db.doc(quotaPath).set({ windowStart: createdAt, count: 7 });
-  console.log('Seeded one synthetic Auth account, list, shared task and invitation quota.');
+  console.log('Seeded one synthetic Auth account, list and shared task.');
 } else {
   assert.equal(process.argv[2], 'verify');
   const account = await auth.getUser(uid);
@@ -49,7 +47,6 @@ if (process.argv[2] === 'seed') {
   }
   assert.deepEqual((await db.doc(listPath).get()).data().memberIds, [uid]);
   assert.equal((await db.doc(taskPath).get()).data().createdAt.toMillis(), createdAt.toMillis());
-  assert.equal((await db.doc(quotaPath).get()).data().count, 7);
-  console.log('PASS: Auth login, list membership, shared task and quota survived export/import restart.');
+  console.log('PASS: Auth login, list membership and shared task survived export/import restart.');
 }
 await db.terminate();
