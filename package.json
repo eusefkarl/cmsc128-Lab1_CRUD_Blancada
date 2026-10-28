@@ -1,0 +1,11 @@
+{
+  "name": "do-it-now-emulator-tools",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test:emulators": "node --test scripts/ubac_emulator.test.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0"
+  }
+}
