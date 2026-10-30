@@ -106,6 +106,7 @@ test('personal UBAC and collaborative membership rules', { timeout: 180000 }, as
     await denied(write(`tasks/${a.uid}-forged`, a, task(b.uid)));
     await denied(write(`tasks/${a.uid}-anonymous`, null, task(a.uid)));
     await denied(write(personal, a, task(b.uid)));
+    await denied(write(`tasks/${a.uid}-bad-time`, a, task(a.uid, { dueTime: 1440 })));
     await denied(rest('POST', ':runQuery', a, query('tasks')));
     await ok(rest('POST', ':runQuery', a, query('tasks', filter('ownerId', 'EQUAL', a.uid))));
     await denied(rest('POST', ':runQuery', a, query('tasks', filter('ownerId', 'EQUAL', b.uid))));

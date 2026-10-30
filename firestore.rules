@@ -2,12 +2,32 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Field rules for every task, personal (/tasks) or shared
+    // (/collaborativeLists/{listId}/tasks). dueTime is minutes after midnight.
+    function validTaskData(data) {
+      return data.keys().hasOnly([
+          'ownerId', 'title', 'details', 'createdAt', 'dueDate', 'dueTime',
+          'priority', 'category', 'isDone'
+        ])
+        && data.ownerId is string
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.details is string && data.details.size() <= 2000
+        && data.createdAt is timestamp
+        && (!('dueDate' in data) || data.dueDate == null || data.dueDate is timestamp)
+        && (!('dueTime' in data) || data.dueTime == null
+            || (data.dueTime is int && data.dueTime >= 0 && data.dueTime < 1440))
+        && data.priority in ['low', 'medium', 'high']
+        && data.category in ['school', 'personal', 'others']
+        && data.isDone is bool;
+    }
+
     match /collaborativeLists/{listId} {
       function listMember() {
         return request.auth != null
           && request.auth.uid in resource.data.memberIds;
       }
 
+      // The 20-member cap matches maxListMembers in lib/core/limits.dart.
       function validList(data) {
         return data.keys().hasAll(['ownerId', 'name', 'memberIds', 'createdAt', 'updatedAt'])
           && data.keys().hasOnly(['ownerId', 'name', 'memberIds', 'createdAt', 'updatedAt'])
@@ -43,31 +63,14 @@ service cloud.firestore {
             && request.auth.uid in get(/databases/$(database)/documents/collaborativeLists/$(listId)).data.memberIds;
         }
 
-        function validSharedTask(data) {
-          return data.keys().hasOnly([
-            'ownerId', 'title', 'details', 'createdAt', 'dueDate', 'dueTime',
-            'priority', 'category', 'isDone'
-          ])
-          && data.ownerId is string
-          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
-          && data.details is string && data.details.size() <= 2000
-          && data.createdAt is timestamp
-          && (!('dueDate' in data) || data.dueDate == null || data.dueDate is timestamp)
-          && (!('dueTime' in data) || data.dueTime == null
-              || (data.dueTime is int && data.dueTime >= 0 && data.dueTime < 1440))
-          && data.priority in ['low', 'medium', 'high']
-          && data.category in ['school', 'personal', 'others']
-          && data.isDone is bool;
-        }
-
         allow read, delete: if currentMember();
         allow create: if currentMember()
           && request.resource.data.ownerId == request.auth.uid
-          && validSharedTask(request.resource.data);
+          && validTaskData(request.resource.data);
         allow update: if currentMember()
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.createdAt == resource.data.createdAt
-          && validSharedTask(request.resource.data);
+          && validTaskData(request.resource.data);
       }
     }
 
@@ -76,39 +79,9 @@ service cloud.firestore {
         return request.auth != null;
       }
 
-      function validTask(data) {
-        return data.keys().hasOnly([
-          'ownerId',
-          'title',
-          'details',
-          'createdAt',
-          'dueDate',
-          'dueTime',
-          'priority',
-          'category',
-          'isDone'
-        ])
-        && data.ownerId is string
-        && data.title is string
-        && data.title.size() > 0
-        && data.title.size() <= 200
-        && data.details is string
-        && data.details.size() <= 2000
-        && data.createdAt is timestamp
-        && (!('dueDate' in data)
-            || data.dueDate == null
-            || data.dueDate is timestamp)
-        && (!('dueTime' in data)
-            || data.dueTime == null
-            || data.dueTime is int)
-        && data.priority in ['low', 'medium', 'high']
-        && data.category in ['school', 'personal', 'others']
-        && data.isDone is bool;
-      }
-
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
-        && validTask(request.resource.data);
+        && validTaskData(request.resource.data);
 
       allow read: if signedIn()
         && resource.data.ownerId == request.auth.uid;
@@ -116,7 +89,7 @@ service cloud.firestore {
       allow update: if signedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
-        && validTask(request.resource.data);
+        && validTaskData(request.resource.data);
 
       allow delete: if signedIn()
         && resource.data.ownerId == request.auth.uid;
