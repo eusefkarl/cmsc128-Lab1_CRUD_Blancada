@@ -4,6 +4,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/enum_label.dart';
+import '../core/limits.dart';
 import '../models/task.dart';
 import '../services/task_repository.dart';
 import '../theme/app_theme.dart';
@@ -149,7 +151,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
         title: const Text('Delete task?'),
         content: Text(
           '"${task.title}" will be removed from this list. '
-          'Undo is available for five seconds while you stay in this list.',
+          'Undo is available for ${undoDeleteWindow.inSeconds} seconds '
+          'while you stay in this list.',
         ),
         actions: [
           TextButton(
@@ -172,10 +175,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
 
     setState(() => _hiddenTaskIds.add(taskId));
     _pendingDeletions[taskId] = task;
-    final timer = Timer(
-      const Duration(seconds: 5),
-      () => _commitDeletion(taskId),
-    );
+    final timer = Timer(undoDeleteWindow, () => _commitDeletion(taskId));
     _pendingDeletionTimers[taskId] = timer;
 
     if (!mounted) return;
@@ -183,7 +183,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('"${task.title}" deleted'),
-        duration: const Duration(seconds: 5),
+        duration: undoDeleteWindow,
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () {
@@ -238,9 +238,6 @@ class _TaskHomePageState extends State<TaskHomePage> {
     if (second == null) return -1;
     return first.compareTo(second);
   }
-
-  String _label(Enum value) =>
-      value.name[0].toUpperCase() + value.name.substring(1);
 
   String _sortLabel(TaskSortOption value) => switch (value) {
     TaskSortOption.dateAdded => 'Date added',
@@ -412,7 +409,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                             .textTheme
                                             .headlineSmall
                                             ?.copyWith(
-                                              fontFamily: 'Exo 2',
+                                              fontFamily: AppFonts.display,
                                               fontWeight: FontWeight.w700,
                                             ),
                                       ),
@@ -483,7 +480,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                           .textTheme
                                           .headlineSmall
                                           ?.copyWith(
-                                            fontFamily: 'Exo 2',
+                                            fontFamily: AppFonts.display,
                                             fontWeight: FontWeight.w700,
                                           ),
                                     ),
@@ -553,7 +550,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                         ...TaskCategory.values.map(
                                           (value) => DropdownMenuItem(
                                             value: value.name,
-                                            child: Text(_label(value)),
+                                            child: Text(value.label),
                                           ),
                                         ),
                                       ],
@@ -584,7 +581,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                         ...TaskPriority.values.map(
                                           (value) => DropdownMenuItem(
                                             value: value.name,
-                                            child: Text(_label(value)),
+                                            child: Text(value.label),
                                           ),
                                         ),
                                       ],

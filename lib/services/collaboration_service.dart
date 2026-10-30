@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../core/limits.dart';
+import '../core/validation.dart';
 import '../models/collaborative_list.dart';
 import 'task_repository.dart';
-
-const _maxMembers = 20;
-final _memberIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
 abstract interface class CollaborationService {
   String get uid;
@@ -84,7 +83,7 @@ class FirebaseCollaborationService implements CollaborationService {
   Future<String> addMember(String listId, String memberUid) async {
     _checkAccount();
     final cleaned = memberUid.trim();
-    if (!_memberIdPattern.hasMatch(cleaned)) {
+    if (!isValidAccountUid(cleaned)) {
       throw const FormatException('Enter a valid account UID.');
     }
     if (cleaned == uid) return 'already-member';
@@ -105,8 +104,8 @@ class FirebaseCollaborationService implements CollaborationService {
         throw StateError('This list has invalid membership data.');
       }
       if (members.contains(cleaned)) return 'already-member';
-      if (members.length >= _maxMembers) {
-        throw StateError('This list already has $_maxMembers members.');
+      if (members.length >= maxListMembers) {
+        throw StateError('This list already has $maxListMembers members.');
       }
       transaction.update(document, {
         'memberIds': [...members, cleaned],

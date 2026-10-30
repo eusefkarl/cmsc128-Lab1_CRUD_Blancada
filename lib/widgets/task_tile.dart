@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/enum_label.dart';
 import '../models/task.dart';
 import '../theme/app_theme.dart';
 
@@ -120,12 +121,12 @@ class TaskTile extends StatelessWidget {
         runSpacing: 8,
         children: [
           _Badge(
-            label: _label(task.priority),
+            label: task.priority.label,
             color: priorityColor,
             icon: Icons.flag_outlined,
           ),
           _Badge(
-            label: _label(task.category),
+            label: task.category.label,
             color: AppColors.secondaryText,
             icon: Icons.sell_outlined,
           ),
@@ -152,9 +153,6 @@ class TaskTile extends StatelessWidget {
     TaskPriority.medium => AppColors.mediumPriority,
     TaskPriority.low => AppColors.lowPriority,
   };
-
-  String _label(Enum value) =>
-      value.name[0].toUpperCase() + value.name.substring(1);
 }
 
 class _Badge extends StatelessWidget {

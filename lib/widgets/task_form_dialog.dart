@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/enum_label.dart';
 import '../models/task.dart';
 import 'status_panel.dart';
 
@@ -196,10 +197,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                     .map(
                       (priority) => DropdownMenuItem(
                         value: priority,
-                        child: Text(
-                          priority.name[0].toUpperCase() +
-                              priority.name.substring(1),
-                        ),
+                        child: Text(priority.label),
                       ),
                     )
                     .toList(),
@@ -216,10 +214,7 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                     .map(
                       (category) => DropdownMenuItem(
                         value: category,
-                        child: Text(
-                          category.name[0].toUpperCase() +
-                              category.name.substring(1),
-                        ),
+                        child: Text(category.label),
                       ),
                     )
                     .toList(),

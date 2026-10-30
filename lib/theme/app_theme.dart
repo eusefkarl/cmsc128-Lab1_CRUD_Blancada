@@ -17,6 +17,12 @@ abstract final class AppColors {
   static const success = Color(0xFF63DCBC);
 }
 
+abstract final class AppFonts {
+  /// Display face for headings. Not bundled with the app yet (no font asset
+  /// or loader), so Flutter falls back to the default font until one is added.
+  static const display = 'Exo 2';
+}
+
 abstract final class AppTheme {
   static ThemeData get dark {
     final colorScheme = const ColorScheme.dark(
@@ -49,7 +55,7 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0,
         shape: Border(bottom: BorderSide(color: AppColors.divider)),
         titleTextStyle: TextStyle(
-          fontFamily: 'Exo 2',
+          fontFamily: AppFonts.display,
           fontSize: 22,
           fontWeight: FontWeight.w800,
           color: AppColors.primaryText,
@@ -154,7 +160,7 @@ abstract final class AppTheme {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
-          fontFamily: 'Exo 2',
+          fontFamily: AppFonts.display,
           color: AppColors.primaryText,
           fontSize: 24,
           fontWeight: FontWeight.w700,

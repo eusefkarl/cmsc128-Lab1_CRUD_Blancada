@@ -55,17 +55,11 @@ class FirestoreTaskRepository implements TaskRepository {
     final Query<Map<String, dynamic>> query = _listId == null
         ? _tasks.where('ownerId', isEqualTo: _uid)
         : _tasks;
-    return query.snapshots().map((snapshot) {
-      final tasks = snapshot.docs.map(Task.fromFirestore).toList();
-      tasks.sort((first, second) {
-        if (first.isDone != second.isDone) return first.isDone ? 1 : -1;
-        if (first.dueDate == null && second.dueDate == null) return 0;
-        if (first.dueDate == null) return 1;
-        if (second.dueDate == null) return -1;
-        return first.dueDate!.compareTo(second.dueDate!);
-      });
-      return tasks;
-    });
+    // TaskHomePage applies the user's chosen sort, so the stream keeps
+    // Firestore's order.
+    return query.snapshots().map(
+      (snapshot) => snapshot.docs.map(Task.fromFirestore).toList(),
+    );
   }
 
   @override

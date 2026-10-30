@@ -1,8 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/auth_messages.dart';
+import '../core/validation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/feedback_banner.dart';
 import '../widgets/status_panel.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -39,9 +42,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _nameMessage;
   String? _emailMessage;
   String? _passwordMessage;
-  _FeedbackTone _nameTone = _FeedbackTone.error;
-  _FeedbackTone _emailTone = _FeedbackTone.error;
-  _FeedbackTone _passwordTone = _FeedbackTone.error;
+  FeedbackTone _nameTone = FeedbackTone.error;
+  FeedbackTone _emailTone = FeedbackTone.error;
+  FeedbackTone _passwordTone = FeedbackTone.error;
 
   AuthAccountSnapshot? get _user => _auth.currentAccount;
 
@@ -114,21 +117,21 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
         if (emailChanged) {
           _emailMessage = 'Email address updated after verification.';
-          _emailTone = _FeedbackTone.success;
+          _emailTone = FeedbackTone.success;
         }
       });
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _emailMessage = _authError(error.code);
-          _emailTone = _FeedbackTone.error;
+          _emailTone = FeedbackTone.error;
         });
       }
     } on FirebaseException {
       if (mounted) {
         setState(() {
           _emailMessage = 'Your account could not be synchronized. Check your connection and try again.';
-          _emailTone = _FeedbackTone.error;
+          _emailTone = FeedbackTone.error;
         });
       }
     } finally {
@@ -151,27 +154,27 @@ class _ProfileScreenState extends State<ProfileScreen>
         _nameEdited = false;
         _savedName = _name.text.trim();
         _nameMessage = 'Display name updated.';
-        _nameTone = _FeedbackTone.success;
+        _nameTone = FeedbackTone.success;
       });
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _nameMessage = _authError(error.code);
-          _nameTone = _FeedbackTone.error;
+          _nameTone = FeedbackTone.error;
         });
       }
     } on FirebaseException {
       if (mounted) {
         setState(() {
           _nameMessage = 'The display name was updated in your account, but the profile copy could not sync. Reopen this page when connected.';
-          _nameTone = _FeedbackTone.warning;
+          _nameTone = FeedbackTone.warning;
         });
       }
     } on FormatException catch (error) {
       if (mounted) {
         setState(() {
           _nameMessage = error.message;
-          _nameTone = _FeedbackTone.error;
+          _nameTone = FeedbackTone.error;
         });
       }
     } finally {
@@ -192,14 +195,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (currentEmail == requestedEmail) {
       setState(() {
         _emailMessage = 'This is already your current email address.';
-        _emailTone = _FeedbackTone.info;
+        _emailTone = FeedbackTone.info;
       });
       return;
     }
     if (_emailCurrentPassword.text.isEmpty) {
       setState(() {
         _emailMessage = 'Enter your current password to change your email.';
-        _emailTone = _FeedbackTone.error;
+        _emailTone = FeedbackTone.error;
       });
       return;
     }
@@ -221,27 +224,27 @@ class _ProfileScreenState extends State<ProfileScreen>
         _pendingEmail = requestedEmail;
         _emailMessage =
             'Verification requested for $requestedEmail. Check that inbox and its spam/junk folder. Your current email remains active until you verify it.';
-        _emailTone = _FeedbackTone.info;
+        _emailTone = FeedbackTone.info;
       });
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _emailMessage = _authError(error.code);
-          _emailTone = _FeedbackTone.error;
+          _emailTone = FeedbackTone.error;
         });
       }
     } on StateError catch (error) {
       if (mounted) {
         setState(() {
           _emailMessage = error.message;
-          _emailTone = _FeedbackTone.error;
+          _emailTone = FeedbackTone.error;
         });
       }
     } on FormatException catch (error) {
       if (mounted) {
         setState(() {
           _emailMessage = error.message;
-          _emailTone = _FeedbackTone.error;
+          _emailTone = FeedbackTone.error;
         });
       }
     } finally {
@@ -272,28 +275,28 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         setState(() {
           _passwordMessage = 'Password changed. Your new password is active.';
-          _passwordTone = _FeedbackTone.success;
+          _passwordTone = FeedbackTone.success;
         });
       }
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         setState(() {
           _passwordMessage = _authError(error.code);
-          _passwordTone = _FeedbackTone.error;
+          _passwordTone = FeedbackTone.error;
         });
       }
     } on FormatException catch (error) {
       if (mounted) {
         setState(() {
           _passwordMessage = error.message;
-          _passwordTone = _FeedbackTone.error;
+          _passwordTone = FeedbackTone.error;
         });
       }
     } on StateError catch (error) {
       if (mounted) {
         setState(() {
           _passwordMessage = error.message;
-          _passwordTone = _FeedbackTone.info;
+          _passwordTone = FeedbackTone.info;
         });
       }
     } finally {
@@ -313,15 +316,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     'invalid-credential' => 'The current password is incorrect.',
     'requires-recent-login' =>
       'Please sign out and sign in again before changing this account detail.',
-    'invalid-email' => 'Enter a valid email address.',
     'weak-password' =>
       'Choose a stronger password that meets your account requirements.',
-    'too-many-requests' => 'Too many attempts. Wait a while, then try again.',
-    'network-request-failed' =>
-      'The request could not reach the server. Check your connection.',
     'operation-not-allowed' =>
       'This account operation is not enabled for this Firebase project.',
-    _ => 'The request could not be completed. Please try again.',
+    _ =>
+      sharedAuthErrorMessage(code) ??
+      'The request could not be completed. Please try again.',
   };
 
   Future<void> _logout() async {
@@ -371,37 +372,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _passwordCurrentPassword.clear();
     _newPassword.clear();
     _confirmPassword.clear();
-  }
-
-  Widget _feedback(String message, _FeedbackTone tone) {
-    final (color, icon) = switch (tone) {
-      _FeedbackTone.success => (AppColors.success, Icons.check_circle_outline),
-      _FeedbackTone.info => (AppColors.cyan, Icons.info_outline),
-      _FeedbackTone.warning => (
-        AppColors.mediumPriority,
-        Icons.warning_amber_outlined,
-      ),
-      _FeedbackTone.error => (AppColors.highPriority, Icons.error_outline),
-    };
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.raisedSurface,
-          border: Border.all(color: color),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-      ),
-    );
   }
 
   String? _required(String? value, String label) =>
@@ -468,7 +438,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 displayName.isEmpty ? 'Profile' : displayName,
                                 style: Theme.of(context).textTheme.titleLarge
                                     ?.copyWith(
-                                      fontFamily: 'Exo 2',
+                                      fontFamily: AppFonts.display,
                                       fontWeight: FontWeight.w700,
                                     ),
                               ),
@@ -531,7 +501,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           if (_nameMessage != null) ...[
                             const SizedBox(height: 16),
-                            _feedback(_nameMessage!, _nameTone),
+                            FeedbackBanner(
+                              message: _nameMessage!,
+                              tone: _nameTone,
+                            ),
                           ],
                           const SizedBox(height: 16),
                           FilledButton(
@@ -568,9 +541,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 labelText: 'New email address',
                               ),
                               validator: (value) =>
-                                  value == null ||
-                                      !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                          .hasMatch(value.trim())
+                                  value == null || !isValidEmail(value)
                                   ? 'Enter a valid email address.'
                                   : null,
                             )
@@ -605,7 +576,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ],
                           if (_emailMessage != null) ...[
                             const SizedBox(height: 16),
-                            _feedback(_emailMessage!, _emailTone),
+                            FeedbackBanner(
+                              message: _emailMessage!,
+                              tone: _emailTone,
+                            ),
                           ],
                           if (_syncing) ...[
                             const SizedBox(height: 12),
@@ -669,7 +643,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               autofillHints: const [AutofillHints.newPassword],
                               decoration: const InputDecoration(
                                 labelText: 'New password',
-                                helperText: 'At least 6 characters',
+                                helperText:
+                                    'At least $minPasswordLength characters',
                               ),
                               validator: (value) {
                                 final required = _required(
@@ -677,8 +652,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   'a new password',
                                 );
                                 if (required != null) return required;
-                                if (value!.length < 6) {
-                                  return 'Use at least 6 characters.';
+                                if (value!.length < minPasswordLength) {
+                                  return 'Use at least $minPasswordLength '
+                                      'characters.';
                                 }
                                 if (value == _passwordCurrentPassword.text) {
                                   return 'Choose a password different from your current one.';
@@ -703,7 +679,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             if (_passwordMessage != null) ...[
                               const SizedBox(height: 16),
-                              _feedback(_passwordMessage!, _passwordTone),
+                              FeedbackBanner(
+                                message: _passwordMessage!,
+                                tone: _passwordTone,
+                              ),
                             ],
                             const SizedBox(height: 16),
                             OutlinedButton(
@@ -730,5 +709,3 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 }
-
-enum _FeedbackTone { success, info, warning, error }

@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/auth_messages.dart';
+import '../core/validation.dart';
 import '../services/auth_service.dart';
-import '../theme/app_theme.dart';
+import '../widgets/feedback_banner.dart';
 import '../widgets/status_panel.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -56,13 +58,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           _success = error.code == 'user-not-found';
           _message = switch (error.code) {
             'user-not-found' => 'If an account exists for that email, a password-reset link has been sent.',
-            'too-many-requests' =>
-              'Too many attempts. Wait a while, then try again.',
-            'network-request-failed' =>
-              'The request could not reach the server. Check your connection.',
             'operation-not-allowed' =>
               'Password recovery is not enabled for this Firebase project.',
-            _ => 'Could not send the reset email. Please try again.',
+            _ =>
+              sharedAuthErrorMessage(error.code) ??
+              'Could not send the reset email. Please try again.',
           };
         });
       }
@@ -98,35 +98,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   const SizedBox(height: 24),
                   if (_message != null) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.raisedSurface,
-                          border: Border.all(
-                            color: _success
-                                ? AppColors.success
-                                : AppColors.highPriority,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              _success
-                                  ? Icons.check_circle_outline
-                                  : Icons.error_outline,
-                              color: _success
-                                  ? AppColors.success
-                                  : AppColors.highPriority,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(_message!)),
-                          ],
-                        ),
-                      ),
+                    FeedbackBanner(
+                      message: _message!,
+                      tone: _success ? FeedbackTone.success : FeedbackTone.error,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -138,9 +112,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       labelText: 'Email address',
                     ),
                     validator: (value) =>
-                        value == null ||
-                            !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                .hasMatch(value.trim())
+                        value == null || !isValidEmail(value)
                         ? 'Enter a valid email address.'
                         : null,
                   ),

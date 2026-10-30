@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/validation.dart';
+
 class AuthAccountSnapshot {
   const AuthAccountSnapshot({
     required this.uid,
@@ -65,14 +67,16 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
   }) async {
     final normalizedEmail = email.trim();
     final normalizedName = displayName.trim();
-    if (!_isValidEmail(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
       throw const FormatException('Enter a valid email address.');
     }
     if (normalizedName.isEmpty) {
       throw const FormatException('Enter a display name.');
     }
-    if (password.length < 6) {
-      throw const FormatException('Password must be at least 6 characters.');
+    if (password.length < minPasswordLength) {
+      throw const FormatException(
+        'Password must be at least $minPasswordLength characters.',
+      );
     }
 
     final credential = await _auth.createUserWithEmailAndPassword(
@@ -101,7 +105,7 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
     required String password,
   }) {
     final normalizedEmail = email.trim();
-    if (!_isValidEmail(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
       throw const FormatException('Enter a valid email address.');
     }
     if (password.isEmpty) throw const FormatException('Enter your password.');
@@ -125,7 +129,7 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
   @override
   Future<void> sendPasswordReset(String email) {
     final normalizedEmail = email.trim();
-    if (!_isValidEmail(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
       throw const FormatException('Enter a valid email address.');
     }
     return _auth.sendPasswordResetEmail(
@@ -199,9 +203,9 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
         'This account uses Google sign-in. Set a password through password recovery first.',
       );
     }
-    if (newPassword.length < 6) {
+    if (newPassword.length < minPasswordLength) {
       throw const FormatException(
-        'New password must be at least 6 characters.',
+        'New password must be at least $minPasswordLength characters.',
       );
     }
     if (newPassword == currentPassword) {
@@ -233,7 +237,7 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
         'This account uses Google sign-in. Change its email through Google account settings.',
       );
     }
-    if (!_isValidEmail(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
       throw const FormatException('Enter a valid email address.');
     }
     if (normalizedEmail == currentEmail) return;
@@ -257,9 +261,6 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
 
   @override
   Future<void> logout() => _auth.signOut();
-
-  bool _isValidEmail(String email) =>
-      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
 
   ActionCodeSettings? get _actionCodeSettings {
     if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) return null;

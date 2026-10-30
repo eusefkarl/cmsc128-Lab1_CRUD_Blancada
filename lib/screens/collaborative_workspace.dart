@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/limits.dart';
+import '../core/validation.dart';
 import '../models/collaborative_list.dart';
 import '../services/collaboration_service.dart';
 import '../services/task_repository.dart';
@@ -188,7 +190,8 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
                 children: [
                   Text(
                     owner
-                        ? 'Owner · ${selected.memberIds.length}/20 members'
+                        ? 'Owner · ${selected.memberIds.length}/'
+                              '$maxListMembers members'
                         : 'Member · shared task access',
                   ),
                   if (owner)
@@ -288,9 +291,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                 enabled: !_busy,
                 autocorrect: false,
                 decoration: const InputDecoration(labelText: 'Account UID'),
-                validator: (value) =>
-                    RegExp(r'^[A-Za-z0-9_-]{1,128}$')
-                        .hasMatch(value?.trim() ?? '')
+                validator: (value) => isValidAccountUid(value ?? '')
                     ? null
                     : 'Enter a valid account UID.',
               ),

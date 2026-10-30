@@ -1,8 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/auth_messages.dart';
+import '../core/validation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/feedback_banner.dart';
 import '../widgets/status_panel.dart';
 import 'forgot_password_screen.dart';
 
@@ -89,7 +92,6 @@ class _AuthScreenState extends State<AuthScreen> {
     'invalid-credential' ||
     'wrong-password' ||
     'user-not-found' => 'Email or password is incorrect.',
-    'invalid-email' => 'Enter a valid email address.',
     'weak-password' => 'Choose a stronger password.',
     'user-disabled' => 'This account has been disabled.',
     'operation-not-allowed' => 'Email/password sign-in is disabled in Firebase. Enable it in Authentication > Sign-in method.',
@@ -99,7 +101,9 @@ class _AuthScreenState extends State<AuthScreen> {
     'account-exists-with-different-credential' =>
       'An account already exists with another sign-in method.',
     'permission-denied' => 'Firebase rejected the profile write. Deploy the updated Firestore rules.',
-    _ => 'Firebase error ($code): ${details ?? 'Please try again.'}',
+    _ =>
+      sharedAuthErrorMessage(code) ??
+      'Firebase error ($code): ${details ?? 'Please try again.'}',
   };
 
   String? _required(String? value, String label) =>
@@ -136,7 +140,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
-                              fontFamily: 'Exo 2',
+                              fontFamily: AppFonts.display,
                               color: AppColors.primaryText,
                               fontWeight: FontWeight.w800,
                             ),
@@ -150,27 +154,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 24),
                       if (_error != null) ...[
-                        Semantics(
-                          liveRegion: true,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.raisedSurface,
-                              border: Border.all(color: AppColors.highPriority),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  color: AppColors.highPriority,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(_error!)),
-                              ],
-                            ),
-                          ),
+                        FeedbackBanner(
+                          message: _error!,
+                          tone: FeedbackTone.error,
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -199,8 +185,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           if (_required(value, 'email address') != null) {
                             return 'Enter your email address.';
                           }
-                          return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                  .hasMatch(value!.trim())
+                          return isValidEmail(value!)
                               ? null
                               : 'Enter a valid email address.';
                         },
@@ -234,8 +219,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           if (_required(value, 'password') != null) {
                             return 'Enter your password.';
                           }
-                          if (_registering && value!.length < 6) {
-                            return 'Use at least 6 characters.';
+                          if (_registering &&
+                              value!.length < minPasswordLength) {
+                            return 'Use at least $minPasswordLength characters.';
                           }
                           return null;
                         },
