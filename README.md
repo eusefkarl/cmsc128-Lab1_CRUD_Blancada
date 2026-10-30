@@ -1,7 +1,5 @@
 # Do It Now!
 
-> Activity 3: the current setup, collaborative-list schema, access rules, emulator instructions, and repository-history notes are in [the application README](do_it_now/README.md#activity-3-user-based-access-control-and-collaborative-lists). Run application commands from the `do_it_now` directory.
-
 A Flutter task-management app with a game HUD-inspired interface. Tasks support due dates, due times, priorities, categories, completion state, sorting, filtering, undo deletion, and Firestore persistence.
 
 ## Tech Stack
@@ -217,3 +215,98 @@ firebase emulators:exec --only auth,firestore --project doitnow-c26f9 "node --te
 ```
 
 These checks create throwaway accounts in the local Authentication emulator, read one-time email action codes from its local endpoint, and verify changes against Authentication and the local Firestore rules. They do not use real accounts or production data. The Flutter `integration_test` suite is also available for native targets using `flutter test integration_test/account_compliance_test.dart -d windows --dart-define-from-file=.env` while the emulators run; Flutter's integration runner does not support Chrome.
+
+## Activity 3: User-Based Access Control and Collaborative Lists
+
+Activity 3 keeps personal tasks private and adds small collaborative lists. Firebase Authentication supplies the identity used by Firestore rules. A user's UID, rather than an email address, is the stable ownership and membership key.
+
+### Firestore schema
+
+The existing `users/{uid}` and personal `tasks/{taskId}` collections remain in use. Personal task documents keep the fields listed above; `ownerId` must equal the signed-in UID. Collaborative data uses this structure:
+
+```text
+collaborativeLists/{listId}
+  ownerId       string       immutable UID of the list owner
+  name          string       list name
+  memberIds     string[]     owner and current member UIDs; maximum 20 entries
+  createdAt     timestamp
+  updatedAt     timestamp
+
+collaborativeLists/{listId}/tasks/{taskId}
+  ownerId       string       UID of the user who created this task
+  title         string       required task title
+  details       string       optional details
+  createdAt     timestamp
+  dueDate       timestamp?   optional due date
+  dueTime       int?         minutes after midnight
+  priority      string       low, medium, or high
+  category      string       school, personal, or others
+  isDone        boolean      completion state
+```
+
+Each account has a deterministic default collaborative list. Initialization is idempotent and must not overwrite an existing list. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. Shared task `ownerId` records its creator and cannot be changed. A removed member loses access because rules check current membership on each request.
+
+### Access matrix
+
+| Data or operation | Signed-out user | Personal task owner | Current collaborative-list member | List owner | Non-member |
+| --- | --- | --- | --- | --- | --- |
+| Read or change `users/{uid}` profile | Denied | Own profile only | Own profile only | Own profile only | Denied |
+| Read or change `tasks/{taskId}` | Denied | Own tasks only | Own personal tasks only | Own personal tasks only | Denied |
+| Read a collaborative list and its tasks | Denied | If a current member | Allowed | Allowed | Denied, including guessed IDs |
+| Create, update, or delete a collaborative task | Denied | If a current member | Allowed; creator `ownerId` stays immutable | Allowed; creator `ownerId` stays immutable | Denied |
+| Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; membership changes use the callable function | Denied |
+
+Only the list owner may add a member, and the owner cannot be removed. Membership is changed through the authenticated `addListMember` callable function, which accepts `{listId, email}` and resolves a registered email to its UID on the server. The caller must have a verified email and own the list. The function returns only a result (`added` or `already-member`) and the member count, not a user profile. Membership is capped at 20 UIDs, including the owner. Firestore clients cannot edit `memberIds` directly.
+
+### Emulator setup and checks
+
+Authentication, Firestore, and Functions emulators are configured in `firebase.json`. The server targets Node.js 22; install it alongside the Firebase CLI and a Java runtime for Firestore emulation. Install the server dependencies, then start all three emulators when exercising member invitations:
+
+```powershell
+npm ci --prefix functions
+firebase emulators:start --only auth,firestore,functions --project doitnow-c26f9 --import=.firebase-emulator-data --export-on-exit=.firebase-emulator-data
+```
+
+Run the app with `flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true`. This connects Auth, Firestore, and the `us-central1` callable to their local emulators. A fresh emulator run can omit `--import`; stop the emulators normally to write the export. Emulator data is local and does not represent production records. The emulator UI is available at `http://127.0.0.1:4000` when enabled; use its Authentication and Firestore views to inspect test accounts, list membership, and task documents.
+
+For automated checks with a fresh emulator instance (stop any existing emulators first):
+
+```powershell
+firebase emulators:exec --only auth,firestore,functions --project doitnow-c26f9 "node --test scripts/account_compliance.test.mjs scripts/ubac_emulator.test.mjs"
+flutter analyze
+flutter test
+flutter build web --dart-define-from-file=.env
+```
+
+The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, membership tampering, invitation quotas, and access revocation. Widget tests exercise list switching and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
+
+To check backend restart persistence independently, use a fresh export directory containing only synthetic data:
+
+```powershell
+firebase emulators:exec --only auth,firestore --project doitnow-c26f9 --export-on-exit=.firebase-emulator-data/ubac-restart "node scripts/ubac_persistence.mjs seed"
+firebase emulators:exec --only auth,firestore --project doitnow-c26f9 --import=.firebase-emulator-data/ubac-restart "node scripts/ubac_persistence.mjs verify"
+```
+
+The second command verifies login and restored list membership, task data, and invitation quota after a separate emulator process starts. Do not run the seed against an imported copy of the same fixture.
+
+Local validation on October 23, 2026: 25 Flutter tests passed, analysis reported no issues, the release web build passed, and all 11 account/UBAC emulator tests passed. The separate export/import restart check passed. `npm audit --omit=dev` reported zero vulnerabilities. Server emulator checks used the installed Node.js 24.19 runtime; execution on the configured deployment runtime, Node.js 22, remains to be verified. These results do not establish production deployment or a manual two-account browser demonstration.
+
+### Cloud Functions setup and deployment
+
+Email-to-UID lookup must stay on the server. Do not make `users` publicly searchable, put Admin SDK credentials in Flutter, or commit service-account keys. Cloud Functions deployment requires the Firebase project to meet the current Cloud Functions billing and runtime requirements. Check the project's plan and budget controls before deploying; the Firebase documentation describes the [pricing plans](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans) and [callable functions](https://firebase.google.com/docs/functions/callable).
+
+This implementation has not been deployed during this work. A read-only Cloud Functions listing attempt failed, so the deployed state could not be confirmed; the project's billing capability is also unconfirmed. Treat the callable feature as local/emulator work until the project plan is confirmed and deployment is verified.
+
+Install dependencies with `npm ci --prefix functions` and test against the local emulators. Deploy only after verifying the target project and the function behavior:
+
+```powershell
+firebase deploy --only functions:addListMember --project doitnow-c26f9
+```
+
+The rules and any required Firestore indexes also need deployment to the intended project. Function deployment is a separate operation from running the Flutter app; a local implementation or emulator pass does not mean the production function has been deployed. Confirm deployment in Firebase Console and run a two-account check against the deployed project before describing it as live.
+
+### Demo and repository history
+
+Prepare two accounts by registering through the app. Add three to five personal tasks to each account, then add the second registered account to the first account's collaborative list. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
+
+The Activity 3 working branch is `act3-ubac`, created from `main` at `45b1e7d`. The authentication work was already present in the branch's history: merging `auth` reported that it was already up to date, so this activity did not create another auth merge or produce merge conflicts. The repository also contains the earlier historical merge commit `6f65f96` (`Merge PR #1 dev`). This records the history observed for this activity; it does not claim a new pull request or merge.
