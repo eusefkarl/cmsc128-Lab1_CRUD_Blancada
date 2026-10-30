@@ -8,7 +8,7 @@ A Flutter task-management app with a game HUD-inspired interface. Tasks support 
 - **Firebase Core**: initializes the Firebase project for supported platforms.
 - **Firebase Authentication**: email/password accounts and optional Google sign-in.
 - **Cloud Firestore**: stores task documents and streams changes in real time.
-- **Google Fonts**: provides the Exo 2 typeface used throughout the HUD interface.
+- **Exo 2** is the intended heading typeface (`AppFonts.display` in `lib/theme/app_theme.dart`). It is not bundled yet, so headings fall back to the default font.
 
 Firestore was chosen instead of an in-memory list because tasks must survive browser refreshes and app restarts. Its realtime stream keeps the task list synchronized after create, edit, completion, and delete operations. Authentication and `ownerId` prevent users from accessing another user's tasks.
 
@@ -174,7 +174,7 @@ The UI first asks for confirmation, hides the task temporarily, and provides a f
 - Checkbox completion with strikethrough and visual status styling.
 - Sort by date added, due date, priority, or tag.
 - Filter by priority or category.
-- Baby-blue game HUD theme with Exo 2 typography.
+- Baby-blue game HUD theme.
 - Red high-priority, yellow medium-priority, and green low-priority indicators.
 
 ## Screenshots
