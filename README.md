@@ -256,7 +256,9 @@ Each account has a deterministic default collaborative list. Initialization is i
 | Create, update, or delete a collaborative task | Denied | If a current member | Allowed; creator `ownerId` stays immutable | Allowed; creator `ownerId` stays immutable | Denied |
 | Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; UID membership is updated directly under Firestore rules | Denied |
 
-Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which is shown in that account's **Profile -> Account details** panel. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
+The dashboard has **Personal** and **Groups** tabs. The **Groups** tab lists each group the account owns or has joined and shows the account's UID with a **Copy UID** action. Opening a group shows its tasks and, for the owner, **Add member**.
+
+Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which that account can copy from its **Groups** tab or read in **Profile -> Account details**. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
 
 ### Emulator setup and checks
 
@@ -278,7 +280,7 @@ flutter test
 flutter build web --dart-define-from-file=.env
 ```
 
-The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, owner-only UID membership changes, duplicate and capacity limits, and access revocation. Widget tests exercise list switching, UID invitations, and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
+The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, owner-only UID membership changes, duplicate and capacity limits, and access revocation. Widget tests exercise tab and group switching, UID invitations, and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
 
 To check backend restart persistence independently, use a fresh export directory containing only synthetic data:
 
@@ -298,10 +300,10 @@ firebase deploy --only firestore:rules --project doitnow-c26f9
 flutter build web --dart-define-from-file=.env
 ```
 
-Host the built web app on Firebase Hosting or another static host. Do not run `firebase deploy --only functions`; there is no Functions source or configuration left in this project. The trade-off is that there is no email-to-UID lookup, so each person must share the UID shown in their **Profile -> Account details** panel with the list owner before being added.
+Host the built web app on Firebase Hosting or another static host. Do not run `firebase deploy --only functions`; there is no Functions source or configuration left in this project. The trade-off is that there is no email-to-UID lookup, so each person must share the UID shown on their **Groups** tab with the group owner before being added.
 
 ### Demo and repository history
 
-Prepare two accounts by registering through the app. Add three to five personal tasks to each account. Sign in as the second account, copy the UID from **Profile -> Account details**, then sign in as the first account and add that UID to its collaborative list. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
+Prepare two accounts by registering through the app. Add three to five personal tasks to each account. Sign in as the second account, copy the UID from the **Groups** tab, then sign in as the first account, open its group on the **Groups** tab, and add that UID with **Add member**. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
 
 The Activity 3 working branch is `act3-ubac`, created from `main` at `45b1e7d`. The authentication work was already present in the branch's history: merging `auth` reported that it was already up to date, so this activity did not create another auth merge or produce merge conflicts. The repository also contains the earlier historical merge commit `6f65f96` (`Merge PR #1 dev`). This records the history observed for this activity; it does not claim a new pull request or merge.
