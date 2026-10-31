@@ -274,7 +274,7 @@ npm ci
 firebase emulators:start --only auth,firestore --project doitnow-c26f9 --import=.firebase-emulator-data --export-on-exit=.firebase-emulator-data
 ```
 
-Run the app with `flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true`. This connects Auth and Firestore to their local emulators. A fresh emulator run can omit `--import`; stop the emulators normally to write the export. Emulator data is local and does not represent production records. The emulator UI is available at `http://127.0.0.1:4000` when enabled; use its Authentication and Firestore views to inspect test accounts, list membership, and task documents.
+Run the app with `flutter run -d chrome --dart-define-from-file=.env --dart-define=USE_FIREBASE_EMULATORS=true`. This connects Auth and Firestore to their local emulators. Emulator builds use a placeholder API key and keep the session in memory, so refreshing the page signs out. This is deliberate: on web the SDK validates a saved session during `Firebase.initializeApp`, before the emulator can be connected, which would otherwise leave Auth on the real project. A fresh emulator run can omit `--import`; stop the emulators normally to write the export. Emulator data is local and does not represent production records. The emulator UI is available at `http://127.0.0.1:4000` when enabled; use its Authentication and Firestore views to inspect test accounts, list membership, and task documents.
 
 For automated checks with a fresh emulator instance (stop any existing emulators first):
 
