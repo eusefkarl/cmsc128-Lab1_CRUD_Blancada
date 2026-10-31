@@ -547,6 +547,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               controller: _name,
                               autofillHints: const [AutofillHints.name],
                               textInputAction: TextInputAction.done,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteractionIfError,
                               onChanged: (_) => setState(
                                 () => _nameEdited =
                                     _name.text.trim() != _savedName,
@@ -598,10 +600,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 controller: _email,
                                 keyboardType: TextInputType.emailAddress,
                                 autofillHints: const [AutofillHints.email],
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteractionIfError,
                                 onChanged: (_) =>
                                     setState(() => _emailEdited = true),
                                 decoration: const InputDecoration(
-                                  labelText: 'New email address',
+                                  labelText: 'Email address',
                                 ),
                                 validator: (value) =>
                                     value == null || !isValidEmail(value)
@@ -697,6 +701,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: TextFormField(
                                 controller: _passwordCurrentPassword,
                                 obscureText: true,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteractionIfError,
                                 onChanged: (_) => setState(() {}),
                                 autofillHints: const [AutofillHints.password],
                                 decoration: const InputDecoration(
@@ -712,6 +718,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: TextFormField(
                                 controller: _newPassword,
                                 obscureText: true,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteractionIfError,
                                 onChanged: (_) => setState(() {}),
                                 autofillHints: const [
                                   AutofillHints.newPassword,
@@ -744,6 +752,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: TextFormField(
                                 controller: _confirmPassword,
                                 obscureText: true,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteractionIfError,
                                 onChanged: (_) => setState(() {}),
                                 autofillHints: const [
                                   AutofillHints.newPassword,

@@ -417,6 +417,11 @@ class _MembersDialogState extends State<_MembersDialog> {
               child: TextFormField(
                 controller: _memberUid,
                 autocorrect: false,
+                textInputAction: TextInputAction.done,
+                autovalidateMode: AutovalidateMode.onUserInteractionIfError,
+                onFieldSubmitted: (_) {
+                  if (!_busy) _add();
+                },
                 decoration: const InputDecoration(labelText: 'Account UID'),
                 validator: (value) => isValidAccountUid(value ?? '')
                     ? null

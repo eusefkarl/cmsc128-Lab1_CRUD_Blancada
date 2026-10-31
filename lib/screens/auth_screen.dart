@@ -172,6 +172,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           controller: _name,
                           autofillHints: const [AutofillHints.name],
                           textInputAction: TextInputAction.next,
+                          autovalidateMode:
+                              AutovalidateMode.onUserInteractionIfError,
                           decoration: const InputDecoration(
                             labelText: 'Display name',
                           ),
@@ -185,6 +187,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
                         textInputAction: TextInputAction.next,
+                        autovalidateMode:
+                            AutovalidateMode.onUserInteractionIfError,
                         decoration: const InputDecoration(
                           labelText: 'Email address',
                         ),
@@ -206,8 +210,17 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? AutofillHints.newPassword
                               : AutofillHints.password,
                         ],
+                        textInputAction: TextInputAction.done,
+                        autovalidateMode:
+                            AutovalidateMode.onUserInteractionIfError,
+                        onFieldSubmitted: (_) {
+                          if (!_loading) _submit();
+                        },
                         decoration: InputDecoration(
                           labelText: 'Password',
+                          helperText: _registering
+                              ? 'At least $minPasswordLength characters'
+                              : null,
                           suffixIcon: IconButton(
                             tooltip: _obscurePassword
                                 ? 'Show password'

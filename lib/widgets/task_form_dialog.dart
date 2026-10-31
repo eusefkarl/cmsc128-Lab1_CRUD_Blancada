@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/enum_label.dart';
 import '../models/task.dart';
+import 'discard_changes_dialog.dart';
 import 'status_panel.dart';
 
 class TaskFormDialog extends StatefulWidget {
@@ -102,24 +103,55 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
   String _formatDate(BuildContext context, DateTime date) =>
       MaterialLocalizations.of(context).formatMediumDate(date);
 
+  bool get _hasChanges {
+    final task = widget.task;
+    return _titleController.text.trim() != (task?.title ?? '') ||
+        _detailsController.text.trim() != (task?.details ?? '') ||
+        _dueDate != task?.dueDate ||
+        _dueTime != task?.dueTime ||
+        _priority != (task?.priority ?? TaskPriority.medium) ||
+        _category != (task?.category ?? TaskCategory.others);
+  }
+
+  // Clicking outside, Esc and system back land here. Cancel closes directly.
+  Future<void> _handleDismiss() async {
+    if (_hasChanges) {
+      final discard = await _showPicker<bool>(
+        (_) => const DiscardChangesDialog(
+          message: 'The changes to this task will be lost.',
+        ),
+      );
+      if (discard != true) return;
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) _handleDismiss();
+    },
+    child: _buildForm(context),
+  );
+
+  Widget _buildForm(BuildContext context) {
     final isEditing = widget.task != null;
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
-      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 24, 16),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const StatusEyebrow('Mission control'),
+          const StatusEyebrow('Quest log'),
           const SizedBox(height: 6),
           Text(isEditing ? 'Edit task' : 'New task'),
         ],
       ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+      content: SizedBox(
+        width: 480,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -129,6 +161,8 @@ class _TaskFormDialogState extends State<TaskFormDialog> {
                 controller: _titleController,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(),
                 onChanged: (value) {
                   if (_titleError && value.trim().isNotEmpty) {
                     setState(() => _titleError = false);
