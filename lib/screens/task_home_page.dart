@@ -56,6 +56,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
   final Set<String> _hiddenTaskIds = {};
   final Map<String, Timer> _pendingDeletionTimers = {};
   final Map<String, Task> _pendingDeletions = {};
+  String? _undoBarTaskId;
 
   ScaffoldMessengerState? _messenger;
   bool _disposing = false;
@@ -70,7 +71,11 @@ class _TaskHomePageState extends State<TaskHomePage> {
     _pendingDeletionTimers.remove(taskId)?.cancel();
     final task = _pendingDeletions.remove(taskId);
     if (task == null) return;
-
+    // Undo must not stay on screen once the deletion can no longer be undone.
+    if (_undoBarTaskId == taskId) {
+      _undoBarTaskId = null;
+      if (!_disposing) _messenger?.hideCurrentSnackBar();
+    }
     try {
       await _repository.deleteTask(task);
     } catch (error) {
@@ -193,19 +198,20 @@ class _TaskHomePageState extends State<TaskHomePage> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
+    _undoBarTaskId = taskId;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('"${task.title}" deleted'),
         duration: undoDeleteWindow,
-
+        // A SnackBar with an action otherwise stays until it is dismissed.
+        persist: false,
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () {
+            if (_undoBarTaskId == taskId) _undoBarTaskId = null;
+            if (_pendingDeletions.remove(taskId) == null) return;
             timer.cancel();
             _pendingDeletionTimers.remove(taskId);
-            _pendingDeletions.remove(taskId);
-
             if (mounted) setState(() => _hiddenTaskIds.remove(taskId));
           },
         ),
