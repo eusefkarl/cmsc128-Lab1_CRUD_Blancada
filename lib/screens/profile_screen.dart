@@ -5,6 +5,8 @@ import '../core/auth_messages.dart';
 import '../core/validation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/copy_uid_button.dart';
+import '../widgets/discard_changes_dialog.dart';
 import '../widgets/feedback_banner.dart';
 import '../widgets/input_lock.dart';
 import '../widgets/status_panel.dart';
@@ -400,21 +402,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (!_hasUnsavedChanges) return true;
     return await showDialog<bool>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Discard unsaved changes?'),
-            content: const Text(
-              'Your unsaved profile edits and password entries will be lost.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Stay'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Discard'),
-              ),
-            ],
+          builder: (_) => const DiscardChangesDialog(
+            message:
+                'Your unsaved profile edits and password entries will be lost.',
           ),
         ) ??
         false;
@@ -544,6 +534,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                               labelText: 'Account UID',
                               helperText: 'Share this UID with a group owner so they can add you.',
                             ),
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: CopyUidButton(uid: user.uid),
                           ),
                           const SizedBox(height: 16),
                           InputLock(
