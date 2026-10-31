@@ -9,15 +9,35 @@ import '../widgets/feedback_banner.dart';
 import '../widgets/status_panel.dart';
 
 /// App bar entry to [ProfileScreen], showing the account's initial.
-class ProfileButton extends StatelessWidget {
-  const ProfileButton({super.key});
+class ProfileButton extends StatefulWidget {
+  const ProfileButton({super.key, this.displayNames});
 
-  String _userInitial() {
+  /// Defaults to the signed-in Firebase account's display name.
+  final Stream<String?>? displayNames;
+
+  @override
+  State<ProfileButton> createState() => _ProfileButtonState();
+}
+
+class _ProfileButtonState extends State<ProfileButton> {
+  String? _initialName;
+  late final Stream<String?> _names;
+
+  @override
+  void initState() {
+    super.initState();
+    _names = widget.displayNames ?? _firebaseNames();
+  }
+
+  // authStateChanges misses a name set after sign-in, as registration does.
+  Stream<String?> _firebaseNames() {
     try {
-      final name = FirebaseAuth.instance.currentUser?.displayName;
-      return (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+      _initialName = FirebaseAuth.instance.currentUser?.displayName;
+      return FirebaseAuth.instance.userChanges().map(
+        (user) => user?.displayName,
+      );
     } on FirebaseException {
-      return '?';
+      return const Stream.empty();
     }
   }
 
@@ -29,7 +49,17 @@ class ProfileButton extends StatelessWidget {
     ),
     icon: CircleAvatar(
       radius: 14,
-      child: Text(_userInitial(), style: const TextStyle(fontSize: 12)),
+      child: StreamBuilder<String?>(
+        stream: _names,
+        initialData: _initialName,
+        builder: (context, snapshot) {
+          final name = snapshot.data;
+          return Text(
+            (name?.isNotEmpty == true ? name![0] : '?').toUpperCase(),
+            style: const TextStyle(fontSize: 12),
+          );
+        },
+      ),
     ),
     tooltip: 'Profile',
   );
@@ -349,7 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       'This account operation is not enabled for this Firebase project.',
     _ =>
       sharedAuthErrorMessage(code) ??
-      'The request could not be completed. Please try again.',
+          'The request could not be completed. Please try again.',
   };
 
   Future<void> _logout() async {
@@ -506,8 +536,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             readOnly: true,
                             decoration: const InputDecoration(
                               labelText: 'Account UID',
-                              helperText:
-                                  'Share this UID with a group owner so they can add you.',
+                              helperText: 'Share this UID with a group owner so they can add you.',
                             ),
                           ),
                           const SizedBox(height: 16),
