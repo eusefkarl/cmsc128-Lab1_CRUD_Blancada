@@ -15,7 +15,7 @@ import '../widgets/empty_state.dart';
 
 import '../widgets/stat.dart';
 import '../widgets/status_panel.dart';
-
+import '../widgets/system_notice.dart';
 import '../widgets/task_form_dialog.dart';
 import '../widgets/task_tile.dart';
 import 'profile_screen.dart';
@@ -58,6 +58,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
   final Map<String, Task> _pendingDeletions = {};
   String? _undoBarTaskId;
 
+  String? _notice;
+  Timer? _noticeTimer;
   ScaffoldMessengerState? _messenger;
   bool _disposing = false;
 
@@ -101,7 +103,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
   @override
   void dispose() {
     _disposing = true;
-
+    _noticeTimer?.cancel();
     // Leaving a list ends Undo and commits each deletion to its original scope.
     // The repository also rejects writes if the authenticated account changed.
     if (_pendingDeletionTimers.isNotEmpty || _hiddenTaskIds.isNotEmpty) {
@@ -219,6 +221,28 @@ class _TaskHomePageState extends State<TaskHomePage> {
     );
   }
 
+  void _setNotice(String? message) {
+    _noticeTimer?.cancel();
+    if (message != null) {
+      _noticeTimer = Timer(systemNoticeDuration, () => _setNotice(null));
+    }
+    if (mounted) setState(() => _notice = message);
+  }
+
+  Future<void> _setDone(Task task, bool done) async {
+    final cleared = done && !task.isDone;
+
+    task.isDone = done;
+    if (cleared) _setNotice('Quest cleared: ${task.title}');
+
+    try {
+      await _repository.updateTask(task);
+    } catch (error) {
+      if (cleared) _setNotice(null);
+      _showError(error);
+    }
+  }
+
   List<Task> _prepareTasks(List<Task> source) {
     final tasks = source
         .where((task) => task.id == null || !_hiddenTaskIds.contains(task.id))
@@ -286,371 +310,393 @@ class _TaskHomePageState extends State<TaskHomePage> {
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Column(
-        children: [
-          if (widget.listControls != null) widget.listControls!,
-          Expanded(
-            child: StreamBuilder<List<Task>>(
-              stream: _taskStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  if (!_reportedAccessLoss &&
-                      widget.onAccessLost != null &&
-                      snapshot.error is FirebaseException &&
-                      (snapshot.error as FirebaseException).code ==
-                          'permission-denied') {
-                    _reportedAccessLoss = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) widget.onAccessLost?.call();
-                    });
-                  }
-                  debugPrint('Could not load tasks: ${snapshot.error}');
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: AppColors.highPriority,
-                            size: 32,
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'Could not load tasks. Check your connection and '
-                            'try again.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final tasks = _prepareTasks(snapshot.data!);
-                final allTasks = snapshot.data!
-                    .where(
-                      (task) =>
-                          task.id == null || !_hiddenTaskIds.contains(task.id),
-                    )
-                    .toList();
-                final total = allTasks.length;
-                final completedCount = allTasks
-                    .where((task) => task.isDone)
-                    .length;
-                final completionRatio = allTasks.isEmpty
-                    ? 0.0
-                    : completedCount / allTasks.length;
-                final percent = (completionRatio * 100).round();
-
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 700;
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: AppLayout.maxContentWidth,
-                        ),
-                        child: ListView(
-                          padding: EdgeInsets.fromLTRB(
-                            compact ? 16 : 24,
-                            compact ? 8 : 24,
-                            compact ? 16 : 24,
-                            compact ? 96 : 32,
-                          ),
+      body: _withNotice(
+        Column(
+          children: [
+            if (widget.listControls != null) widget.listControls!,
+            Expanded(
+              child: StreamBuilder<List<Task>>(
+                stream: _taskStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    if (!_reportedAccessLoss &&
+                        widget.onAccessLost != null &&
+                        snapshot.error is FirebaseException &&
+                        (snapshot.error as FirebaseException).code ==
+                            'permission-denied') {
+                      _reportedAccessLoss = true;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) widget.onAccessLost?.call();
+                      });
+                    }
+                    debugPrint('Could not load tasks: ${snapshot.error}');
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            StatusPanel(
-                              padding: compact ? 14 : 20,
-                              child: LayoutBuilder(
-                                builder: (context, panelConstraints) {
-                                  final horizontal =
-                                      panelConstraints.maxWidth >= 680;
-                                  final compactMetrics = Text(
-                                    '$total total · $completedCount done · '
-                                    '${total - completedCount} open',
-                                    style: const TextStyle(
-                                      color: AppColors.secondaryText,
-                                    ),
-                                  );
-                                  final metrics = Row(
-                                    children: [
-                                      Stat(label: 'Total', value: '$total'),
-                                      const SizedBox(width: 16),
-                                      Stat(
-                                        label: 'Done',
-                                        value: '$completedCount',
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Stat(
-                                        label: 'Open',
-                                        value: '${total - completedCount}',
-                                      ),
-                                    ],
-                                  );
-                                  final title = Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Wrap(
-                                        spacing: 10,
-                                        crossAxisAlignment:
-                                            WrapCrossAlignment.center,
-                                        children: [
-                                          const StatusEyebrow('Quest log'),
-                                          Text(
-                                            widget.listName,
-                                            style: const TextStyle(
-                                              color: AppColors.secondaryText,
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '$percent% cleared',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineSmall
-                                            ?.copyWith(
-                                              fontFamily: AppFonts.display,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ],
-                                  );
-
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (horizontal)
-                                        Row(
-                                          children: [
-                                            Expanded(child: title),
-                                            const SizedBox(width: 24),
-                                            SizedBox(
-                                              width: 340,
-                                              child: metrics,
-                                            ),
-                                          ],
-                                        )
-                                      else if (compact) ...[
-                                        title,
-                                        const SizedBox(height: 2),
-                                        compactMetrics,
-                                      ] else ...[
-                                        title,
-                                        const SizedBox(height: 16),
-                                        metrics,
-                                      ],
-                                      SizedBox(height: compact ? 10 : 16),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(
-                                          AppRadii.control,
-                                        ),
-                                        child: TweenAnimationBuilder<double>(
-                                          tween: Tween(end: completionRatio),
-                                          duration:
-                                              MediaQuery.disableAnimationsOf(
-                                                context,
-                                              )
-                                              ? Duration.zero
-                                              : const Duration(
-                                                  milliseconds: 500,
-                                                ),
-                                          curve: Curves.easeOutCubic,
-                                          builder: (context, value, _) =>
-                                              LinearProgressIndicator(
-                                                value: value,
-                                                minHeight: 8,
-                                                semanticsLabel:
-                                                    'Task completion',
-                                                semanticsValue: '$percent',
-                                              ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
+                            Icon(
+                              Icons.error_outline,
+                              color: AppColors.highPriority,
+                              size: 32,
                             ),
-                            SizedBox(height: compact ? 12 : 24),
-                            Padding(
-                              padding: EdgeInsets.only(
-                                bottom: compact ? 8 : 16,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Active quests',
-                                      style:
-                                          (compact
-                                                  ? Theme.of(context)
-                                                        .textTheme
-                                                        .titleLarge
-                                                  : Theme.of(context)
-                                                        .textTheme
-                                                        .headlineSmall)
-                                              ?.copyWith(
-                                                fontFamily: AppFonts.display,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                    ),
-                                  ),
-                                  if (!compact)
-                                    FilledButton.icon(
-                                      onPressed: () => _openTaskForm(),
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('New task'),
-                                    ),
-                                ],
-                              ),
+                            SizedBox(height: 12),
+                            Text(
+                              'Could not load tasks. Check your connection and '
+                              'try again.',
+                              textAlign: TextAlign.center,
                             ),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 8,
-                              children: [
-                                _controlShell(
-                                  icon: Icons.sort,
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<TaskSortOption>(
-                                      isExpanded: true,
-                                      value: _sortOption,
-                                      style: const TextStyle(
-                                        color: AppColors.primaryText,
-                                      ),
-                                      dropdownColor: AppColors.surface,
-                                      iconEnabledColor: AppColors.secondaryText,
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setState(() => _sortOption = value);
-                                        }
-                                      },
-                                      items: TaskSortOption.values
-                                          .map(
-                                            (value) => DropdownMenuItem(
-                                              value: value,
-                                              child: Text(
-                                                'Sort: ${_sortLabel(value)}',
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                                ),
-                                _controlShell(
-                                  icon: Icons.sell_outlined,
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      isExpanded: true,
-                                      value: _categoryFilter?.name ?? 'all',
-                                      style: const TextStyle(
-                                        color: AppColors.primaryText,
-                                      ),
-                                      dropdownColor: AppColors.surface,
-                                      iconEnabledColor: AppColors.secondaryText,
-                                      onChanged: (value) => setState(
-                                        () => _categoryFilter =
-                                            value == null || value == 'all'
-                                            ? null
-                                            : TaskCategory.values.byName(value),
-                                      ),
-                                      items: [
-                                        const DropdownMenuItem(
-                                          value: 'all',
-                                          child: Text('All categories'),
-                                        ),
-                                        ...TaskCategory.values.map(
-                                          (value) => DropdownMenuItem(
-                                            value: value.name,
-                                            child: Text(value.label),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                _controlShell(
-                                  icon: Icons.flag_outlined,
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      isExpanded: true,
-                                      value: _priorityFilter?.name ?? 'all',
-                                      style: const TextStyle(
-                                        color: AppColors.primaryText,
-                                      ),
-                                      dropdownColor: AppColors.surface,
-                                      iconEnabledColor: AppColors.secondaryText,
-                                      onChanged: (value) => setState(
-                                        () => _priorityFilter =
-                                            value == null || value == 'all'
-                                            ? null
-                                            : TaskPriority.values.byName(value),
-                                      ),
-                                      items: [
-                                        const DropdownMenuItem(
-                                          value: 'all',
-                                          child: Text('All priorities'),
-                                        ),
-                                        ...TaskPriority.values.map(
-                                          (value) => DropdownMenuItem(
-                                            value: value.name,
-                                            child: Text(value.label),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: compact ? 12 : 20),
-                            if (tasks.isEmpty)
-                              EmptyState(
-                                filtered: allTasks.isNotEmpty,
-                                onClearFilters: () => setState(() {
-                                  _priorityFilter = null;
-                                  _categoryFilter = null;
-                                }),
-                              )
-                            else
-                              ...tasks.map(
-                                (task) => TaskTile(
-                                  task: task,
-
-                                  onChanged: (value) async {
-                                    task.isDone = value ?? false;
-                                    try {
-                                      await _repository.updateTask(task);
-                                    } catch (error) {
-                                      _showError(error);
-                                    }
-                                  },
-                                  onEdit: () => _openTaskForm(task: task),
-                                  onDelete: () => _deleteTask(task),
-                                ),
-                              ),
                           ],
                         ),
                       ),
                     );
-                  },
-                );
-              },
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final tasks = _prepareTasks(snapshot.data!);
+                  final allTasks = snapshot.data!
+                      .where(
+                        (task) =>
+                            task.id == null ||
+                            !_hiddenTaskIds.contains(task.id),
+                      )
+                      .toList();
+                  final total = allTasks.length;
+                  final completedCount = allTasks
+                      .where((task) => task.isDone)
+                      .length;
+                  final completionRatio = allTasks.isEmpty
+                      ? 0.0
+                      : completedCount / allTasks.length;
+                  final percent = (completionRatio * 100).round();
+
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 700;
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppLayout.maxContentWidth,
+                          ),
+                          child: ListView(
+                            padding: EdgeInsets.fromLTRB(
+                              compact ? 16 : 24,
+                              compact ? 8 : 24,
+                              compact ? 16 : 24,
+                              compact ? 96 : 32,
+                            ),
+                            children: [
+                              StatusPanel(
+                                padding: compact ? 14 : 20,
+                                child: LayoutBuilder(
+                                  builder: (context, panelConstraints) {
+                                    final horizontal =
+                                        panelConstraints.maxWidth >= 680;
+                                    final compactMetrics = Text(
+                                      '$total total · $completedCount done · '
+                                      '${total - completedCount} open',
+                                      style: const TextStyle(
+                                        color: AppColors.secondaryText,
+                                      ),
+                                    );
+                                    final metrics = Row(
+                                      children: [
+                                        Stat(label: 'Total', value: '$total'),
+                                        const SizedBox(width: 16),
+                                        Stat(
+                                          label: 'Done',
+                                          value: '$completedCount',
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Stat(
+                                          label: 'Open',
+                                          value: '${total - completedCount}',
+                                        ),
+                                      ],
+                                    );
+                                    final title = Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Wrap(
+                                          spacing: 10,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            const StatusEyebrow('Quest log'),
+                                            Text(
+                                              widget.listName,
+                                              style: const TextStyle(
+                                                color: AppColors.secondaryText,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '$percent% cleared',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .headlineSmall
+                                              ?.copyWith(
+                                                fontFamily: AppFonts.display,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                      ],
+                                    );
+
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (horizontal)
+                                          Row(
+                                            children: [
+                                              Expanded(child: title),
+                                              const SizedBox(width: 24),
+                                              SizedBox(
+                                                width: 340,
+                                                child: metrics,
+                                              ),
+                                            ],
+                                          )
+                                        else if (compact) ...[
+                                          title,
+                                          const SizedBox(height: 2),
+                                          compactMetrics,
+                                        ] else ...[
+                                          title,
+                                          const SizedBox(height: 16),
+                                          metrics,
+                                        ],
+                                        SizedBox(height: compact ? 10 : 16),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            AppRadii.control,
+                                          ),
+                                          child: TweenAnimationBuilder<double>(
+                                            tween: Tween(end: completionRatio),
+                                            duration:
+                                                MediaQuery.disableAnimationsOf(
+                                                  context,
+                                                )
+                                                ? Duration.zero
+                                                : const Duration(
+                                                    milliseconds: 500,
+                                                  ),
+                                            curve: Curves.easeOutCubic,
+                                            builder: (context, value, _) =>
+                                                LinearProgressIndicator(
+                                                  value: value,
+                                                  minHeight: 8,
+                                                  semanticsLabel:
+                                                      'Task completion',
+                                                  semanticsValue: '$percent',
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                              SizedBox(height: compact ? 12 : 24),
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: compact ? 8 : 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Active quests',
+                                        style:
+                                            (compact
+                                                    ? Theme.of(context)
+                                                          .textTheme
+                                                          .titleLarge
+                                                    : Theme.of(context)
+                                                          .textTheme
+                                                          .headlineSmall)
+                                                ?.copyWith(
+                                                  fontFamily: AppFonts.display,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                      ),
+                                    ),
+                                    if (!compact)
+                                      FilledButton.icon(
+                                        onPressed: () => _openTaskForm(),
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('New task'),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  _controlShell(
+                                    icon: Icons.sort,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<TaskSortOption>(
+                                        isExpanded: true,
+                                        value: _sortOption,
+                                        style: const TextStyle(
+                                          color: AppColors.primaryText,
+                                        ),
+                                        dropdownColor: AppColors.surface,
+                                        iconEnabledColor:
+                                            AppColors.secondaryText,
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            setState(() => _sortOption = value);
+                                          }
+                                        },
+                                        items: TaskSortOption.values
+                                            .map(
+                                              (value) => DropdownMenuItem(
+                                                value: value,
+                                                child: Text(
+                                                  'Sort: ${_sortLabel(value)}',
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                    ),
+                                  ),
+                                  _controlShell(
+                                    icon: Icons.sell_outlined,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        isExpanded: true,
+                                        value: _categoryFilter?.name ?? 'all',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryText,
+                                        ),
+                                        dropdownColor: AppColors.surface,
+                                        iconEnabledColor:
+                                            AppColors.secondaryText,
+                                        onChanged: (value) => setState(
+                                          () => _categoryFilter =
+                                              value == null || value == 'all'
+                                              ? null
+                                              : TaskCategory.values.byName(
+                                                  value,
+                                                ),
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: 'all',
+                                            child: Text('All categories'),
+                                          ),
+                                          ...TaskCategory.values.map(
+                                            (value) => DropdownMenuItem(
+                                              value: value.name,
+                                              child: Text(value.label),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  _controlShell(
+                                    icon: Icons.flag_outlined,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        isExpanded: true,
+                                        value: _priorityFilter?.name ?? 'all',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryText,
+                                        ),
+                                        dropdownColor: AppColors.surface,
+                                        iconEnabledColor:
+                                            AppColors.secondaryText,
+                                        onChanged: (value) => setState(
+                                          () => _priorityFilter =
+                                              value == null || value == 'all'
+                                              ? null
+                                              : TaskPriority.values.byName(
+                                                  value,
+                                                ),
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: 'all',
+                                            child: Text('All priorities'),
+                                          ),
+                                          ...TaskPriority.values.map(
+                                            (value) => DropdownMenuItem(
+                                              value: value.name,
+                                              child: Text(value.label),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: compact ? 12 : 20),
+                              if (tasks.isEmpty)
+                                EmptyState(
+                                  filtered: allTasks.isNotEmpty,
+                                  onClearFilters: () => setState(() {
+                                    _priorityFilter = null;
+                                    _categoryFilter = null;
+                                  }),
+                                )
+                              else
+                                ...tasks.map(
+                                  (task) => TaskTile(
+                                    task: task,
+
+                                    onChanged: (value) =>
+                                        _setDone(task, value ?? false),
+                                    onEdit: () => _openTaskForm(task: task),
+                                    onDelete: () => _deleteTask(task),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  Widget _withNotice(Widget page) => Stack(
+    fit: StackFit.expand,
+    children: [
+      page,
+      Positioned(
+        top: 8,
+        left: 16,
+        right: 16,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SystemNotice(message: _notice),
+          ),
+        ),
+      ),
+    ],
+  );
 
   Widget _controlShell({
     required IconData icon,
