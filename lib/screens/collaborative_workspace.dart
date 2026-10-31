@@ -8,6 +8,7 @@ import '../models/collaborative_list.dart';
 import '../services/collaboration_service.dart';
 import '../services/task_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/input_lock.dart';
 import 'groups_page.dart';
 import 'task_home_page.dart';
 
@@ -411,14 +412,16 @@ class _MembersDialogState extends State<_MembersDialog> {
               'Enter the account UID of a registered user. They can copy it from their Groups tab. Members can create, edit and delete tasks in this group.',
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _memberUid,
-              enabled: !_busy,
-              autocorrect: false,
-              decoration: const InputDecoration(labelText: 'Account UID'),
-              validator: (value) => isValidAccountUid(value ?? '')
-                  ? null
-                  : 'Enter a valid account UID.',
+            InputLock(
+              locked: _busy,
+              child: TextFormField(
+                controller: _memberUid,
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Account UID'),
+                validator: (value) => isValidAccountUid(value ?? '')
+                    ? null
+                    : 'Enter a valid account UID.',
+              ),
             ),
             if (_busy)
               const Padding(
@@ -515,17 +518,20 @@ class _RenameGroupDialogState extends State<_RenameGroupDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextFormField(
-              controller: _name,
-              enabled: !_busy,
-              autofocus: true,
-              maxLength: maxListNameLength,
-              autovalidateMode: AutovalidateMode.onUserInteractionIfError,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _save(),
-              decoration: const InputDecoration(labelText: 'Group name'),
-              validator: (value) =>
-                  isValidListName(value ?? '') ? null : invalidListNameMessage,
+            InputLock(
+              locked: _busy,
+              child: TextFormField(
+                controller: _name,
+                autofocus: true,
+                maxLength: maxListNameLength,
+                autovalidateMode: AutovalidateMode.onUserInteractionIfError,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _save(),
+                decoration: const InputDecoration(labelText: 'Group name'),
+                validator: (value) => isValidListName(value ?? '')
+                    ? null
+                    : invalidListNameMessage,
+              ),
             ),
             if (_busy)
               const Padding(

@@ -6,6 +6,7 @@ import '../core/validation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/feedback_banner.dart';
+import '../widgets/input_lock.dart';
 import '../widgets/status_panel.dart';
 
 /// App bar entry to [ProfileScreen], showing the account's initial.
@@ -540,20 +541,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _name,
-                            readOnly: _busy,
-                            autofillHints: const [AutofillHints.name],
-                            textInputAction: TextInputAction.done,
-                            onChanged: (_) => setState(
-                              () =>
-                                  _nameEdited = _name.text.trim() != _savedName,
+                          InputLock(
+                            locked: _loading,
+                            child: TextFormField(
+                              controller: _name,
+                              autofillHints: const [AutofillHints.name],
+                              textInputAction: TextInputAction.done,
+                              onChanged: (_) => setState(
+                                () => _nameEdited =
+                                    _name.text.trim() != _savedName,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'Display name',
+                              ),
+                              validator: (value) =>
+                                  _required(value, 'a display name'),
                             ),
-                            decoration: const InputDecoration(
-                              labelText: 'Display name',
-                            ),
-                            validator: (value) =>
-                                _required(value, 'a display name'),
                           ),
                           if (_nameMessage != null) ...[
                             const SizedBox(height: 16),
@@ -586,20 +589,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                           const SizedBox(height: 16),
                           if (_hasPasswordProvider)
-                            TextFormField(
-                              controller: _email,
-                              readOnly: _busy,
-                              keyboardType: TextInputType.emailAddress,
-                              autofillHints: const [AutofillHints.email],
-                              onChanged: (_) =>
-                                  setState(() => _emailEdited = true),
-                              decoration: const InputDecoration(
-                                labelText: 'New email address',
+                            InputLock(
+                              locked: _loading,
+                              child: TextFormField(
+                                controller: _email,
+                                keyboardType: TextInputType.emailAddress,
+                                autofillHints: const [AutofillHints.email],
+                                onChanged: (_) =>
+                                    setState(() => _emailEdited = true),
+                                decoration: const InputDecoration(
+                                  labelText: 'New email address',
+                                ),
+                                validator: (value) =>
+                                    value == null || !isValidEmail(value)
+                                    ? 'Enter a valid email address.'
+                                    : null,
                               ),
-                              validator: (value) =>
-                                  value == null || !isValidEmail(value)
-                                  ? 'Enter a valid email address.'
-                                  : null,
                             )
                           else
                             TextFormField(
@@ -611,16 +616,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           if (_hasPasswordProvider) ...[
                             const SizedBox(height: 16),
-                            TextField(
-                              controller: _emailCurrentPassword,
-                              readOnly: _busy,
-                              obscureText: true,
-                              onChanged: (_) => setState(() {}),
-                              autofillHints: const [AutofillHints.password],
-                              decoration: const InputDecoration(
-                                labelText: 'Current password',
-                                helperText:
-                                    'Required to verify an email change.',
+                            InputLock(
+                              locked: _loading,
+                              child: TextField(
+                                controller: _emailCurrentPassword,
+                                obscureText: true,
+                                onChanged: (_) => setState(() {}),
+                                autofillHints: const [AutofillHints.password],
+                                decoration: const InputDecoration(
+                                  labelText: 'Current password',
+                                  helperText:
+                                      'Required to verify an email change.',
+                                ),
                               ),
                             ),
                           ] else ...[
@@ -678,60 +685,70 @@ class _ProfileScreenState extends State<ProfileScreen>
                               style: TextStyle(color: AppColors.secondaryText),
                             ),
                           ] else ...[
-                            TextFormField(
-                              controller: _passwordCurrentPassword,
-                              readOnly: _busy,
-                              obscureText: true,
-                              onChanged: (_) => setState(() {}),
-                              autofillHints: const [AutofillHints.password],
-                              decoration: const InputDecoration(
-                                labelText: 'Current password',
+                            InputLock(
+                              locked: _loading,
+                              child: TextFormField(
+                                controller: _passwordCurrentPassword,
+                                obscureText: true,
+                                onChanged: (_) => setState(() {}),
+                                autofillHints: const [AutofillHints.password],
+                                decoration: const InputDecoration(
+                                  labelText: 'Current password',
+                                ),
+                                validator: (value) =>
+                                    _required(value, 'your current password'),
                               ),
-                              validator: (value) =>
-                                  _required(value, 'your current password'),
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _newPassword,
-                              readOnly: _busy,
-                              obscureText: true,
-                              onChanged: (_) => setState(() {}),
-                              autofillHints: const [AutofillHints.newPassword],
-                              decoration: const InputDecoration(
-                                labelText: 'New password',
-                                helperText:
-                                    'At least $minPasswordLength characters',
+                            InputLock(
+                              locked: _loading,
+                              child: TextFormField(
+                                controller: _newPassword,
+                                obscureText: true,
+                                onChanged: (_) => setState(() {}),
+                                autofillHints: const [
+                                  AutofillHints.newPassword,
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'New password',
+                                  helperText:
+                                      'At least $minPasswordLength characters',
+                                ),
+                                validator: (value) {
+                                  final required = _required(
+                                    value,
+                                    'a new password',
+                                  );
+                                  if (required != null) return required;
+                                  if (value!.length < minPasswordLength) {
+                                    return 'Use at least $minPasswordLength '
+                                        'characters.';
+                                  }
+                                  if (value == _passwordCurrentPassword.text) {
+                                    return 'Choose a password different from your current one.';
+                                  }
+                                  return null;
+                                },
                               ),
-                              validator: (value) {
-                                final required = _required(
-                                  value,
-                                  'a new password',
-                                );
-                                if (required != null) return required;
-                                if (value!.length < minPasswordLength) {
-                                  return 'Use at least $minPasswordLength '
-                                      'characters.';
-                                }
-                                if (value == _passwordCurrentPassword.text) {
-                                  return 'Choose a password different from your current one.';
-                                }
-                                return null;
-                              },
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _confirmPassword,
-                              readOnly: _busy,
-                              obscureText: true,
-                              onChanged: (_) => setState(() {}),
-                              autofillHints: const [AutofillHints.newPassword],
-                              textInputAction: TextInputAction.done,
-                              decoration: const InputDecoration(
-                                labelText: 'Confirm new password',
+                            InputLock(
+                              locked: _loading,
+                              child: TextFormField(
+                                controller: _confirmPassword,
+                                obscureText: true,
+                                onChanged: (_) => setState(() {}),
+                                autofillHints: const [
+                                  AutofillHints.newPassword,
+                                ],
+                                textInputAction: TextInputAction.done,
+                                decoration: const InputDecoration(
+                                  labelText: 'Confirm new password',
+                                ),
+                                validator: (value) => value != _newPassword.text
+                                    ? 'The passwords do not match.'
+                                    : null,
                               ),
-                              validator: (value) => value != _newPassword.text
-                                  ? 'The passwords do not match.'
-                                  : null,
                             ),
                             if (_passwordMessage != null) ...[
                               const SizedBox(height: 16),
