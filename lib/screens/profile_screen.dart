@@ -381,7 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     'weak-password' =>
       'Choose a stronger password that meets your account requirements.',
     'operation-not-allowed' =>
-      'This account operation is not enabled for this Firebase project.',
+      'This account change is not available right now.',
     _ =>
       sharedAuthErrorMessage(code) ??
           'The request could not be completed. Please try again.',

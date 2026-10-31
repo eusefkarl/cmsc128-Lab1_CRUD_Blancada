@@ -59,7 +59,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           _message = switch (error.code) {
             'user-not-found' => 'If an account exists for that email, a password-reset link has been sent.',
             'operation-not-allowed' =>
-              'Password recovery is not enabled for this Firebase project.',
+              'Password recovery is not available right now.',
             _ =>
               sharedAuthErrorMessage(error.code) ??
               'Could not send the reset email. Please try again.',

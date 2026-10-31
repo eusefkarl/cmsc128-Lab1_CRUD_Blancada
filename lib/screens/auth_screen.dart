@@ -74,7 +74,8 @@ class _AuthScreenState extends State<AuthScreen> {
     } on FirebaseException catch (error) {
       _setError(_firebaseMessage(error.code, error.message));
     } catch (error) {
-      _setError('Google sign-in failed: $error');
+      debugPrint('Google sign-in failed: $error');
+      _setError('Google sign-in failed. Please try again.');
     }
   }
 
@@ -94,17 +95,21 @@ class _AuthScreenState extends State<AuthScreen> {
     'user-not-found' => 'Email or password is incorrect.',
     'weak-password' => 'Choose a stronger password.',
     'user-disabled' => 'This account has been disabled.',
-    'operation-not-allowed' => 'Email/password sign-in is disabled in Firebase. Enable it in Authentication > Sign-in method.',
+    'operation-not-allowed' =>
+      'This sign-in method is not available right now.',
     'network-request-failed' =>
       'Network request failed. Check your internet connection.',
     'popup-closed-by-user' => 'Google sign-in was cancelled.',
     'account-exists-with-different-credential' =>
       'An account already exists with another sign-in method.',
-    'permission-denied' => 'Firebase rejected the profile write. Deploy the updated Firestore rules.',
-    _ =>
-      sharedAuthErrorMessage(code) ??
-      'Firebase error ($code): ${details ?? 'Please try again.'}',
+    'permission-denied' => 'Your profile could not be saved. Please try again.',
+    _ => sharedAuthErrorMessage(code) ?? _unexpectedError(code, details),
   };
+
+  String _unexpectedError(String code, String? details) {
+    debugPrint('Firebase error ($code): $details');
+    return 'Something went wrong. Please try again.';
+  }
 
   String? _required(String? value, String label) =>
       value == null || value.trim().isEmpty ? 'Enter your $label.' : null;

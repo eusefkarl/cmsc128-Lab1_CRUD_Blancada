@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/action_error.dart';
 import '../core/enum_label.dart';
 import '../core/limits.dart';
 
@@ -126,9 +127,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
 
   void _showError(Object error) {
     if (!mounted) return;
-
+    debugPrint('Task action failed: $error');
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not save task: $error')));
+        .showSnackBar(SnackBar(content: Text(actionErrorMessage(error))));
   }
 
   Future<void> _openTaskForm({Task? task}) async {
@@ -295,20 +296,22 @@ class _TaskHomePageState extends State<TaskHomePage> {
                       if (mounted) widget.onAccessLost?.call();
                     });
                   }
-                  return Center(
+                  debugPrint('Could not load tasks: ${snapshot.error}');
+                  return const Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.error_outline,
                             color: AppColors.highPriority,
                             size: 32,
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           Text(
-                            'Could not load tasks: ${snapshot.error}',
+                            'Could not load tasks. Check your connection and '
+                            'try again.',
                             textAlign: TextAlign.center,
                           ),
                         ],
