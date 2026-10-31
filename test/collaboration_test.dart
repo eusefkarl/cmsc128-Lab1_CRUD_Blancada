@@ -76,6 +76,7 @@ class FakeCollaboration implements CollaborationService {
   Completer<void>? namesGate;
   final renames = <String>[];
   Object? renameError;
+  Completer<void>? actionGate;
   final lists = StreamController<List<CollaborativeList>>.broadcast();
   final scopes = <String, ScopeTasks>{};
   bool initialized = false;
@@ -91,6 +92,7 @@ class FakeCollaboration implements CollaborationService {
   );
   @override
   Future<String> addMember(String listId, String memberUid) async {
+    await actionGate?.future;
     membersAdded.add('$listId:$memberUid');
     return 'added';
   }
@@ -103,6 +105,7 @@ class FakeCollaboration implements CollaborationService {
 
   @override
   Future<void> renameList(String listId, String name) async {
+    await actionGate?.future;
     if (renameError != null) throw renameError!;
     renames.add('$listId:$name');
   }
@@ -711,6 +714,29 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('adding locks the field without toggling readOnly', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a')..names['a'] = 'Ari';
+      await openMembersOf(tester, service, ['a']);
+      service.actionGate = Completer<void>();
+      final field = find.widgetWithText(TextFormField, 'Account UID');
+      await tester.enterText(field, 'new-uid');
+      await tester.tap(find.widgetWithText(FilledButton, 'Add member'));
+      await tester.pump();
+      await tester.pump();
+      final editable = tester.widget<EditableText>(
+        find.descendant(of: field, matching: find.byType(EditableText)),
+      );
+      expect(editable.readOnly, isFalse);
+      expect(editable.focusNode.hasFocus, isFalse);
+      expect(service.membersAdded, isEmpty);
+      service.actionGate!.complete();
+      await tester.pumpAndSettle();
+      expect(service.membersAdded, ['a:new-uid']);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('a newly added member is listed by name', (tester) async {
       final service = FakeCollaboration('a')
         ..names.addAll({'a': 'Ari', 'new-uid': 'Cy'});
@@ -795,6 +821,27 @@ void main() {
       await tester.enterText(field, 'Study squad');
       await tester.pumpAndSettle();
       expect(find.text(invalidListNameMessage), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('saving locks the field without toggling readOnly', (
+      tester,
+    ) async {
+      final service = await openRename(tester);
+      service.actionGate = Completer<void>();
+      await tester.enterText(field, 'Study squad');
+      await tester.tap(save);
+      await tester.pump();
+      await tester.pump();
+      final editable = tester.widget<EditableText>(
+        find.descendant(of: field, matching: find.byType(EditableText)),
+      );
+      expect(editable.readOnly, isFalse);
+      expect(editable.focusNode.hasFocus, isFalse);
+      expect(service.renames, isEmpty);
+      service.actionGate!.complete();
+      await tester.pumpAndSettle();
+      expect(service.renames, ['a:Study squad']);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 

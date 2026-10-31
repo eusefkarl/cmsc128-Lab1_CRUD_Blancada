@@ -231,9 +231,57 @@ void main() {
           .onPressed,
       isNull,
     );
+
+    // Input is locked without toggling readOnly, which sends the web engine a
+    // configuration update it cannot always apply.
+    await tester.pump();
+    final name = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Display name'),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(name).readOnly, isFalse);
+    expect(tester.widget<EditableText>(name).focusNode.hasFocus, isFalse);
+    await tester.tap(name, warnIfMissed: false);
+    await tester.pump();
+    expect(tester.widget<EditableText>(name).focusNode.hasFocus, isFalse);
+
     service.saveCompletion!.complete();
     await tester.pumpAndSettle();
     expect(find.text('Display name updated.'), findsOneWidget);
+    expect(tester.widget<EditableText>(name).readOnly, isFalse);
+
+    await tester.tap(name);
+    await tester.pumpAndSettle();
+    expect(tester.widget<EditableText>(name).focusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('typing during a background sync is kept and not locked out', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final service = FakeProfileAuthService()
+      ..syncCompletion = Completer<void>();
+    await tester.pumpWidget(MaterialApp(home: ProfileScreen(auth: service)));
+    await tester.pump();
+    expect(find.text('Checking account status…'), findsOneWidget);
+
+    final name = find.widgetWithText(TextFormField, 'Display name');
+    await tester.tap(name);
+    await tester.pump();
+    final editable = find.descendant(
+      of: name,
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(editable).focusNode.hasFocus, isTrue);
+    expect(tester.widget<EditableText>(editable).readOnly, isFalse);
+    await tester.enterText(name, 'Typed during sync');
+
+    service.syncCompletion!.complete();
+    await tester.pumpAndSettle();
+    expect(tester.widget<EditableText>(editable).focusNode.hasFocus, isTrue);
+    expect(tester.widget<EditableText>(editable).readOnly, isFalse);
+    expect(find.text('Typed during sync'), findsOneWidget);
   });
 
   testWidgets('requested email verification is not an unsaved draft', (
@@ -348,13 +396,16 @@ class FakeProfileAuthService implements ProfileAuthService {
   int logoutCount = 0;
   bool signedOut = false;
   Completer<void>? saveCompletion;
+  Completer<void>? syncCompletion;
 
   @override
   AuthAccountSnapshot? get currentAccount => signedOut ? null : account;
 
   @override
-  Future<AuthAccountSnapshot?> refreshAndSyncCurrentUserProfile() async =>
-      signedOut ? null : account;
+  Future<AuthAccountSnapshot?> refreshAndSyncCurrentUserProfile() async {
+    await syncCompletion?.future;
+    return signedOut ? null : account;
+  }
 
   @override
   Future<void> updateDisplayName(String displayName) async {
