@@ -234,7 +234,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
   }
 
   Future<void> _setDone(Task task, bool done) async {
-    final cleared = done && !task.isDone;
+    final wasDone = task.isDone;
+    final cleared = done && !wasDone;
 
     task.isDone = done;
     if (cleared) _setNotice('Quest cleared: ${task.title}');
@@ -242,6 +243,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
     try {
       await _repository.updateTask(task);
     } catch (error) {
+      // No snapshot follows a failed write, so the task must be restored here.
+      if (mounted) setState(() => task.isDone = wasDone);
       if (cleared) _setNotice(null);
       _showError(error);
     }
