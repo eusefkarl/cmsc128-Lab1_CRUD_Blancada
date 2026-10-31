@@ -171,7 +171,8 @@ The UI first asks for confirmation, hides the task temporarily, and provides a f
 
 - Create and edit task title, details, due date, due time, priority, and category. Enter creates or saves the task, and closing an edited form by clicking outside it asks before discarding the changes.
 - Delete confirmation with delayed deletion and Undo. The Undo bar closes when the deletion commits.
-- Checkbox completion with strikethrough and visual status styling, plus a brief "Quest cleared" notice when a task is completed.
+- Checkbox completion with strikethrough and visual status styling, plus a brief "Quest cleared" notice with the XP earned when a task is completed.
+- XP and levels on the dashboard. A completed task earns 10, 20, or 30 XP for low, medium, or high priority, and reaching the next level costs 100 XP times the current level. Progress is calculated per list from its current tasks and is not stored, so reopening or deleting a completed task takes its XP back. A shared list's level counts every member's completed tasks.
 - Overdue tasks are flagged. A due date with no time counts as on time until that day ends.
 - Sort by date added, due date, priority, or category. Open tasks stay above completed ones under every sort.
 - Filter by priority or category, with **Clear filters** when nothing matches.
@@ -205,7 +206,7 @@ flutter analyze
 flutter test
 ```
 
-Widget tests use fake repositories and account services, so they do not require network access or a live Firestore database. They cover account settings as well as task serialization, editing, deletion confirmation, Undo, completion updates, filtering, and tag ordering.
+Widget tests use fake repositories and account services, so they do not require network access or a live Firestore database. They cover account settings as well as task serialization, editing, deletion confirmation, Undo, completion updates, XP and levels, filtering, and tag ordering.
 
 Run the Firebase-backed account and Firestore-rules checks in isolated emulators:
 
