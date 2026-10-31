@@ -8,7 +8,7 @@ A Flutter task-management app with a game HUD-inspired interface. Tasks support 
 - **Firebase Core**: initializes the Firebase project for supported platforms.
 - **Firebase Authentication**: email/password accounts and optional Google sign-in.
 - **Cloud Firestore**: stores task documents and streams changes in real time.
-- **Exo 2** is the intended heading typeface (`AppFonts.display` in `lib/theme/app_theme.dart`). It is not bundled yet, so headings fall back to the default font.
+- **Exo 2**: the heading typeface (`AppFonts.display` in `lib/theme/app_theme.dart`), bundled under `assets/fonts` with its SIL Open Font License.
 
 Firestore was chosen instead of an in-memory list because tasks must survive browser refreshes and app restarts. Its realtime stream keeps the task list synchronized after create, edit, completion, and delete operations. Authentication and `ownerId` prevent users from accessing another user's tasks.
 
@@ -169,17 +169,16 @@ The UI first asks for confirmation, hides the task temporarily, and provides a f
 
 ## UI Features
 
-- Create and edit task title, details, due date, due time, priority, and category.
-- Delete confirmation with delayed deletion and Undo.
-- Checkbox completion with strikethrough and visual status styling.
-- Sort by date added, due date, priority, or tag.
-- Filter by priority or category.
-- Baby-blue game HUD theme.
+- Create and edit task title, details, due date, due time, priority, and category. Enter creates or saves the task, and closing an edited form by clicking outside it asks before discarding the changes.
+- Delete confirmation with delayed deletion and Undo. The Undo bar closes when the deletion commits.
+- Checkbox completion with strikethrough and visual status styling, plus a brief "Quest cleared" notice when a task is completed.
+- Overdue tasks are flagged. A due date with no time counts as on time until that day ends.
+- Sort by date added, due date, priority, or category. Open tasks stay above completed ones under every sort.
+- Filter by priority or category, with **Clear filters** when nothing matches.
+- Dark System-window theme inspired by hunter and dungeon stories: cyan glow, framed panels, and Exo 2 headings. Motion respects the device's reduced-motion setting.
 - Red high-priority, yellow medium-priority, and green low-priority indicators.
 
 ## Screenshots
-
-Add the application screenshots to a `screenshots/` folder in the project root and use the following layout:
 
 ### Main Task Dashboard
 
@@ -247,7 +246,7 @@ publicProfiles/{uid}
   displayName   string       name other accounts can see; maximum 256 characters
 ```
 
-Each account has a deterministic default collaborative list, named "My group" until its owner renames it. Initialization is idempotent and must not overwrite an existing list. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. `publicProfiles/{uid}` holds only the display name, kept apart from `users/{uid}` because rules cannot hide that document's email field. The app writes it on registration and on each profile sync, which also creates it for existing accounts the next time they open the app. Shared task `ownerId` records its creator and cannot be changed. A removed member loses access because rules check current membership on each request.
+Each account has a deterministic default collaborative list whose ID is the account's UID, named "My group" until its owner renames it. Initialization is idempotent and must not overwrite an existing list. An account can create more lists, each with the ID `<20 random letters and digits>_<owner UID>`. Rules accept only these two forms, so no account can claim the ID of another account's default list. Lists cannot be deleted. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. `publicProfiles/{uid}` holds only the display name, kept apart from `users/{uid}` because rules cannot hide that document's email field. The app writes it on registration and on each profile sync, which also creates it for existing accounts the next time they open the app. Shared task `ownerId` records its creator and cannot be changed. A removed member, or one who leaves, loses access because rules check current membership on each request. Tasks they created stay in the list.
 
 ### Access matrix
 
@@ -259,11 +258,12 @@ Each account has a deterministic default collaborative list, named "My group" un
 | Read or change `tasks/{taskId}` | Denied | Own tasks only | Own personal tasks only | Own personal tasks only | Denied |
 | Read a collaborative list and its tasks | Denied | If a current member | Allowed | Allowed | Denied, including guessed IDs |
 | Create, update, or delete a collaborative task | Denied | If a current member | Allowed; creator `ownerId` stays immutable | Allowed; creator `ownerId` stays immutable | Denied |
-| Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; UID membership is updated directly under Firestore rules | Denied |
+| Create a collaborative list | Denied | Allowed, as its owner | Allowed, as its owner | Allowed, as its owner | Allowed, as its owner |
+| Change list name or membership | Denied | Denied unless also owner | May only remove themselves | Owner only; UID membership is updated directly under Firestore rules | Denied |
 
-The dashboard has **Personal** and **Groups** tabs. The **Groups** tab lists each group the account owns or has joined and shows the account's UID with a **Copy UID** action. Opening a group shows its tasks and, for the owner, **Manage members** and **Rename group**.
+The dashboard has **Personal** and **Groups** tabs. The **Groups** tab lists each group the account owns or has joined, offers **New group**, and shows the account's UID with a **Copy UID** action. Opening a group shows its tasks with the name of each task's creator. The owner also gets **Manage members** and **Rename group**, and any other member gets **Leave group** and a disabled **Manage members** whose tooltip says only the owner can use it. On a narrow display these actions move into a menu in the group's header.
 
-Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which that account can copy from its **Groups** tab or read in **Profile -> Account details**. **Manage members** lists members by display name and can remove any of them. A UID with no public profile is shown as **Unknown account** with the UID, because a well-formed UID is not checked against existing accounts when it is added; this covers a mistyped UID and an account that has not opened the app since public profiles were added. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
+Only the list owner may add or remove other members, and the owner cannot be removed or leave. A member can only remove themselves, and rules reject any other change that member makes to the list. The owner enters the other account's UID, which that account can copy from its **Groups** tab or read in **Profile -> Account details**. **Manage members** lists members by display name and can remove any of them. A UID with no public profile is shown as **Unknown account** with the UID, because a well-formed UID is not checked against existing accounts when it is added; this covers a mistyped UID and an account that has not opened the app since public profiles were added. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
 
 ### Emulator setup and checks
 
