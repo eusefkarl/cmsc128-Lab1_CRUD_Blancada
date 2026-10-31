@@ -257,7 +257,7 @@ void main() {
 
     final newEmail = _uniqueEmail('profile-email-pending');
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'New email address'),
+      find.widgetWithText(TextFormField, 'Email address'),
       newEmail,
     );
     await tester.enterText(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:do_it_now/screens/profile_screen.dart';
@@ -27,7 +28,7 @@ void main() {
 
     final proposedEmail = 'updated@example.test';
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'New email address'),
+      find.widgetWithText(TextFormField, 'Email address'),
       proposedEmail,
     );
     await tester.enterText(
@@ -146,7 +147,7 @@ void main() {
     );
     expect(find.widgetWithText(TextFormField, 'New password'), findsNothing);
     expect(
-      find.widgetWithText(TextFormField, 'New email address'),
+      find.widgetWithText(TextFormField, 'Email address'),
       findsNothing,
     );
     expect(find.text('Current email address'), findsOneWidget);
@@ -290,7 +291,7 @@ void main() {
     final service = FakeProfileAuthService();
     await _pumpProfileRoute(tester, service);
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'New email address'),
+      find.widgetWithText(TextFormField, 'Email address'),
       'pending@example.test',
     );
     await tester.enterText(
@@ -341,6 +342,52 @@ void main() {
       expect(service.requestedEmail, 'unknown@example.test');
     },
   );
+
+  testWidgets('the UID can be copied from the profile', (tester) async {
+    final copied = <String>[];
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    final service = FakeProfileAuthService();
+    await _pumpProfile(tester, service);
+
+    await tester.tap(find.text('Copy UID'));
+    await tester.pumpAndSettle();
+
+    expect(copied, [service.currentAccount!.uid]);
+    expect(find.text('Account UID copied.'), findsOneWidget);
+  });
+
+  testWidgets('a corrected field clears its error and Enter submits', (
+    tester,
+  ) async {
+    final service = FakePasswordRecoveryService();
+    await tester.pumpWidget(
+      MaterialApp(home: ForgotPasswordScreen(auth: service)),
+    );
+
+    final email = find.widgetWithText(TextFormField, 'Email address');
+    await tester.enterText(email, 'not-an-email');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
+    expect(service.requestedEmail, isNull);
+
+    await tester.enterText(email, 'person@example.test');
+    await tester.pump();
+    expect(find.text('Enter a valid email address.'), findsNothing);
+
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(service.requestedEmail, 'person@example.test');
+  });
 }
 
 Future<void> _pumpProfile(
