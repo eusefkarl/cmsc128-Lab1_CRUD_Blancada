@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/limits.dart';
 import '../models/collaborative_list.dart';
 import '../theme/app_theme.dart';
+import '../widgets/copy_uid_button.dart';
 import '../widgets/status_panel.dart';
 import 'profile_screen.dart';
 
@@ -17,6 +17,7 @@ class GroupsPage extends StatelessWidget {
     required this.lists,
     required this.onOpen,
     required this.onRetry,
+    required this.onCreate,
     this.initializing = false,
     this.error,
     this.appBarBottom,
@@ -26,23 +27,10 @@ class GroupsPage extends StatelessWidget {
   final List<CollaborativeList> lists;
   final ValueChanged<CollaborativeList> onOpen;
   final VoidCallback onRetry;
+  final VoidCallback onCreate;
   final bool initializing;
   final String? error;
   final PreferredSizeWidget? appBarBottom;
-
-  Future<void> _copyUid(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    String message;
-    try {
-      await Clipboard.setData(ClipboardData(text: uid));
-      message = 'Account UID copied.';
-    } on PlatformException {
-      message = 'Could not copy. Select the UID and copy it manually.';
-    }
-    if (!messenger.mounted) return;
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
 
   /// Every default group starts as "My group", so equal names need the ID.
   String _subtitle(CollaborativeList list) {
@@ -65,43 +53,34 @@ class GroupsPage extends StatelessWidget {
         final compact = constraints.maxWidth < 700;
         return Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
+            constraints: const BoxConstraints(
+              maxWidth: AppLayout.maxContentWidth,
+            ),
             child: ListView(
               padding: EdgeInsets.all(compact ? 16 : 24),
               children: [
-                StatusPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const StatusEyebrow('Your account UID'),
-                      const SizedBox(height: 8),
-                      SelectableText(
-                        uid,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Share this UID with a group owner so they can add you.',
-                        style: TextStyle(color: AppColors.secondaryText),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => _copyUid(context),
-                        icon: const Icon(Icons.copy),
-                        label: const Text('Copy UID'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    'Your groups',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontFamily: AppFonts.display,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        'Your groups',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontFamily: AppFonts.display,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: onCreate,
+                        icon: const Icon(Icons.add),
+                        label: const Text('New group'),
+                      ),
+                    ],
                   ),
                 ),
                 if (initializing)
@@ -145,6 +124,27 @@ class GroupsPage extends StatelessWidget {
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => onOpen(list),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                StatusPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const StatusEyebrow('Your account UID'),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        uid,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Share this UID with a group owner so they can add you.',
+                        style: TextStyle(color: AppColors.secondaryText),
+                      ),
+                      const SizedBox(height: 12),
+                      CopyUidButton(uid: uid),
+                    ],
                   ),
                 ),
               ],

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/action_error.dart';
 import '../core/limits.dart';
 import '../core/validation.dart';
 import '../models/collaborative_list.dart';
@@ -14,6 +15,14 @@ import 'task_home_page.dart';
 
 const int _personalTab = 0;
 const int _groupsTab = 1;
+
+/// An action with no [onSelected] is shown disabled, with [tooltip] saying why.
+typedef _GroupAction = ({
+  String label,
+  IconData icon,
+  VoidCallback? onSelected,
+  String? tooltip,
+});
 
 /// Hosts the Personal and Groups tabs. A fresh keyed task screen owns each
 /// scope's stream, forms and Undo timers.
@@ -36,7 +45,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   String? _error;
   bool _initializing = true;
   int _generation = 0;
-  DialogRoute<void>? _groupDialog;
+  DialogRoute<dynamic>? _groupDialog;
 
   void _closeGroupDialog() {
     final route = _groupDialog;
@@ -170,6 +179,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
         error: _error,
         onRetry: () => setState(_start),
         onOpen: (list) => setState(() => _setScope(list.id)),
+        onCreate: _createGroup,
         appBarBottom: tabs,
       );
     }
@@ -180,6 +190,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
       repository: _repository,
       listName: selected?.name ?? 'Personal',
       onAccessLost: _selectedId == null ? null : _accessLost,
+
       appBarBottom: tabs,
       listControls: selected == null ? null : _groupHeader(selected),
     );
@@ -188,66 +199,197 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   Widget _groupHeader(CollaborativeList list) {
     final service = _service;
     final owner = list.ownerId == service.uid;
-    final inset = MediaQuery.sizeOf(context).width < 700 ? 16.0 : 24.0;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1200),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(inset - 12, 8, inset, 0),
-          child: SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              spacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                TextButton.icon(
-                  onPressed: () => setState(() => _setScope(null)),
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('All groups'),
-                ),
-                Text(
-                  owner
-                      ? 'Owner · ${list.memberIds.length}/'
-                            '$maxListMembers members'
-                      : 'Member · shared task access',
-                ),
-                if (owner) ...[
-                  TextButton.icon(
-                    onPressed: () => _showGroupDialog(
-                      (_) => _MembersDialog(list: list, service: service),
-                    ),
-                    icon: const Icon(Icons.manage_accounts_outlined),
-                    label: const Text('Manage members'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _showGroupDialog(
-                      (_) => _RenameGroupDialog(list: list, service: service),
-                    ),
-                    icon: const Icon(Icons.drive_file_rename_outline),
-                    label: const Text('Rename group'),
-                  ),
-                ],
-              ],
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    final inset = compact ? 16.0 : 24.0;
+    final actions = <_GroupAction>[
+      if (owner) ...[
+        (
+          label: 'Manage members',
+          icon: Icons.manage_accounts_outlined,
+          onSelected: () => _showGroupDialog(
+            (_) => _MembersDialog(list: list, service: service),
+          ),
+          tooltip: null,
+        ),
+        (
+          label: 'Rename group',
+          icon: Icons.drive_file_rename_outline,
+          onSelected: () => _showGroupDialog(
+            (_) => _GroupNameDialog(
+              title: 'Rename group',
+              submitLabel: 'Save',
+              initialName: list.name,
+              onSubmit: (name) => service.renameList(list.id, name),
             ),
           ),
+          tooltip: null,
+        ),
+      ] else ...[
+        (
+          label: 'Manage members',
+          icon: Icons.manage_accounts_outlined,
+          onSelected: null,
+          tooltip: 'Only the group owner can manage members',
+        ),
+        (
+          label: 'Leave group',
+          icon: Icons.logout,
+          onSelected: () => _leaveGroup(list),
+          tooltip: null,
+        ),
+      ],
+    ];
+    final identity = <Widget>[
+      TextButton.icon(
+        onPressed: () => setState(() => _setScope(null)),
+        icon: const Icon(Icons.arrow_back),
+        label: const Text('All groups'),
+      ),
+      Text(
+        owner
+            ? 'Owner · ${list.memberIds.length}/$maxListMembers members'
+            : 'Member · shared task access',
+      ),
+    ];
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppLayout.maxContentWidth),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(inset - 12, 8, compact ? 4 : inset, 0),
+          child: compact
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 12,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: identity,
+                      ),
+                    ),
+                    if (actions.isNotEmpty)
+                      PopupMenuButton<_GroupAction>(
+                        tooltip: 'Group actions',
+                        onSelected: (action) => action.onSelected?.call(),
+                        itemBuilder: (_) => [
+                          for (final action in actions)
+                            PopupMenuItem(
+                              value: action,
+                              enabled: action.onSelected != null,
+                              child: _withActionTooltip(
+                                action,
+                                Row(
+                                  children: [
+                                    Icon(action.icon),
+                                    const SizedBox(width: 12),
+                                    Flexible(child: Text(action.label)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
+                )
+              : SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    spacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...identity,
+                      for (final action in actions)
+                        _withActionTooltip(
+                          action,
+                          TextButton.icon(
+                            onPressed: action.onSelected,
+                            icon: Icon(action.icon),
+                            label: Text(action.label),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
   }
 
-  Future<void> _showGroupDialog(WidgetBuilder builder) async {
-    final route = DialogRoute<void>(context: context, builder: builder);
+  /// Hover shows the tooltip with a mouse, and a tap shows it on touch screens.
+  Widget _withActionTooltip(_GroupAction action, Widget child) {
+    final tooltip = action.tooltip;
+    if (tooltip == null) return child;
+    return Tooltip(
+      message: tooltip,
+      triggerMode: TooltipTriggerMode.tap,
+      child: child,
+    );
+  }
+
+  Future<T?> _showGroupDialog<T>(WidgetBuilder builder) async {
+    final route = DialogRoute<T>(context: context, builder: builder);
     _groupDialog = route;
-    await Navigator.of(context).push(route);
+    final result = await Navigator.of(context).push(route);
     if (_groupDialog == route) _groupDialog = null;
+    return result;
+  }
+
+  Future<void> _createGroup() async {
+    final service = _service;
+    final generation = _generation;
+    String? created;
+    final confirmed = await _showGroupDialog<bool>(
+      (_) => _GroupNameDialog(
+        title: 'New group',
+        submitLabel: 'Create',
+        onSubmit: (name) async {
+          await service.createList(name);
+          created = name;
+        },
+      ),
+    );
+    if (mounted && generation == _generation && confirmed == true) {
+      _notify('Created $created.');
+    }
+  }
+
+  Future<void> _leaveGroup(CollaborativeList list) async {
+    final service = _service;
+    final generation = _generation;
+    final confirmed = await _showGroupDialog<bool>(
+      (dialogContext) => AlertDialog(
+        title: Text('Leave ${list.name}?'),
+        content: const Text(
+          'You lose access right away. Tasks you created stay in the group.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: AppButtonStyles.danger,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Leave group'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || generation != _generation || confirmed != true) return;
+    // Close the group first. Its task screen commits pending deletions while
+    // this account is still a member, and losing the list is no longer news.
+    setState(() => _setScope(null));
+    await WidgetsBinding.instance.endOfFrame;
+    String message;
+    try {
+      await service.leaveList(list.id);
+      message = 'You left ${list.name}.';
+    } catch (error) {
+      debugPrint('Could not leave the group: $error');
+      message = actionErrorMessage(error);
+    }
+    if (mounted && generation == _generation) _notify(message);
   }
 }
-
-String _actionError(Object error) => switch (error) {
-  StateError(:final message) => message,
-  FormatException(:final message) => message,
-  _ => 'Could not complete the request. Try again.',
-};
 
 class _MembersDialog extends StatefulWidget {
   const _MembersDialog({required this.list, required this.service});
@@ -309,7 +451,7 @@ class _MembersDialogState extends State<_MembersDialog> {
       final message = await action();
       if (mounted) setState(() => _message = message);
     } catch (error) {
-      if (mounted) setState(() => _message = _actionError(error));
+      if (mounted) setState(() => _message = actionErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
       // Removing from a long list can leave the result scrolled out of view.
@@ -472,16 +614,25 @@ class _MembersDialogState extends State<_MembersDialog> {
   );
 }
 
-class _RenameGroupDialog extends StatefulWidget {
-  const _RenameGroupDialog({required this.list, required this.service});
-  final CollaborativeList list;
-  final CollaborationService service;
+/// Names a new group or renames an existing one. Pops true once [onSubmit]
+/// succeeds, and otherwise stays open with the reason.
+class _GroupNameDialog extends StatefulWidget {
+  const _GroupNameDialog({
+    required this.title,
+    required this.submitLabel,
+    required this.onSubmit,
+    this.initialName = '',
+  });
+  final String title;
+  final String submitLabel;
+  final String initialName;
+  final Future<void> Function(String name) onSubmit;
   @override
-  State<_RenameGroupDialog> createState() => _RenameGroupDialogState();
+  State<_GroupNameDialog> createState() => _GroupNameDialogState();
 }
 
-class _RenameGroupDialogState extends State<_RenameGroupDialog> {
-  late final _name = TextEditingController(text: widget.list.name);
+class _GroupNameDialogState extends State<_GroupNameDialog> {
+  late final _name = TextEditingController(text: widget.initialName);
   final _form = GlobalKey<FormState>();
   bool _busy = false;
   String? _message;
@@ -499,13 +650,13 @@ class _RenameGroupDialogState extends State<_RenameGroupDialog> {
       _message = null;
     });
     try {
-      await widget.service.renameList(widget.list.id, _name.text.trim());
-      if (mounted) Navigator.pop(context);
+      await widget.onSubmit(_name.text.trim());
+      if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
         setState(() {
           _busy = false;
-          _message = _actionError(error);
+          _message = actionErrorMessage(error);
         });
       }
     }
@@ -514,7 +665,7 @@ class _RenameGroupDialogState extends State<_RenameGroupDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     scrollable: true,
-    title: const Text('Rename group'),
+    title: Text(widget.title),
     content: SizedBox(
       width: 420,
       child: Form(
@@ -557,7 +708,10 @@ class _RenameGroupDialogState extends State<_RenameGroupDialog> {
         onPressed: () => Navigator.pop(context),
         child: const Text('Cancel'),
       ),
-      FilledButton(onPressed: _busy ? null : _save, child: const Text('Save')),
+      FilledButton(
+        onPressed: _busy ? null : _save,
+        child: Text(widget.submitLabel),
+      ),
     ],
   );
 }

@@ -39,8 +39,11 @@ service cloud.firestore {
           && data.createdAt is timestamp && data.updatedAt is timestamp;
       }
 
+      // An account's default list uses its UID as the ID, and any other list
+      // ends with it, so no one can take the ID of another account's default.
       allow create: if request.auth != null
-        && listId == request.auth.uid
+        && (listId == request.auth.uid
+            || listId.matches('[A-Za-z0-9]{20}_' + request.auth.uid))
         && validList(request.resource.data)
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.memberIds == [request.auth.uid];
@@ -55,6 +58,13 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberIds', 'updatedAt']);
+      // Any other member may only remove themselves.
+      allow update: if request.auth != null
+        && request.auth.uid != resource.data.ownerId
+        && request.auth.uid in resource.data.memberIds
+        && validList(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'updatedAt'])
+        && request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid]);
       allow delete: if false;
 
       match /tasks/{taskId} {

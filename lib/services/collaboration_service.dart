@@ -14,6 +14,8 @@ abstract interface class CollaborationService {
   Future<String> addMember(String listId, String memberUid);
   Future<void> removeMember(String listId, String memberUid);
   Future<void> renameList(String listId, String name);
+  Future<void> createList(String name);
+  Future<void> leaveList(String listId);
 
   /// Display names by UID. Accounts with no name to show are left out.
   Future<Map<String, String>> displayNames(List<String> uids);
@@ -135,6 +137,43 @@ class FirebaseCollaborationService implements CollaborationService {
       _ownedMembers(await transaction.get(document));
       transaction.update(document, {
         'name': cleaned,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  @override
+  Future<void> createList(String name) async {
+    _checkAccount();
+    final cleaned = name.trim();
+    if (!isValidListName(cleaned)) {
+      throw const FormatException(invalidListNameMessage);
+    }
+    final lists = _firestore.collection('collaborativeLists');
+    // firestore.rules requires this ID form. The random part comes first, so
+    // shortId can tell apart groups with equal names and the same owner.
+    await lists.doc('${lists.doc().id}_$uid').set({
+      'ownerId': uid,
+      'name': cleaned,
+      'memberIds': [uid],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> leaveList(String listId) async {
+    _checkAccount();
+    final document = _firestore.collection('collaborativeLists').doc(listId);
+    await _firestore.runTransaction((transaction) async {
+      final data = (await transaction.get(document)).data();
+      if (data?['ownerId'] == uid) {
+        throw StateError('The owner cannot leave this group.');
+      }
+      final members = List<String>.from(data?['memberIds'] as List? ?? const []);
+      if (!members.contains(uid)) return;
+      transaction.update(document, {
+        'memberIds': members.where((member) => member != uid).toList(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
