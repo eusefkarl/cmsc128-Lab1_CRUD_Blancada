@@ -29,7 +29,7 @@ class TaskHomePage extends StatefulWidget {
     this.listControls,
     this.listName = 'Personal',
     this.onAccessLost,
-
+    this.creatorNames,
     this.appBarBottom,
   });
 
@@ -38,6 +38,9 @@ class TaskHomePage extends StatefulWidget {
   final String listName;
   final VoidCallback? onAccessLost;
 
+  /// Looks up who created each task. Shared lists set this; personal ones have
+  /// only one creator.
+  final Future<Map<String, String>> Function(List<String> uids)? creatorNames;
   final PreferredSizeWidget? appBarBottom;
 
   @override
@@ -57,7 +60,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
   final Map<String, Timer> _pendingDeletionTimers = {};
   final Map<String, Task> _pendingDeletions = {};
   String? _undoBarTaskId;
-
+  final Map<String, String> _creatorNames = {};
+  final Set<String> _requestedCreators = {};
   String? _notice;
   Timer? _noticeTimer;
   ScaffoldMessengerState? _messenger;
@@ -243,6 +247,25 @@ class _TaskHomePageState extends State<TaskHomePage> {
     }
   }
 
+  /// Each creator is requested once. A task with no known name shows none.
+  Future<void> _loadCreatorNames(List<Task> tasks) async {
+    final lookup = widget.creatorNames;
+    if (lookup == null) return;
+    final missing = tasks
+        .map((task) => task.ownerId)
+        .nonNulls
+        .toSet()
+        .where(_requestedCreators.add)
+        .toList();
+    if (missing.isEmpty) return;
+    try {
+      final names = await lookup(missing);
+      if (mounted) setState(() => _creatorNames.addAll(names));
+    } catch (error) {
+      debugPrint('Could not load task creators: $error');
+    }
+  }
+
   List<Task> _prepareTasks(List<Task> source) {
     final tasks = source
         .where((task) => task.id == null || !_hiddenTaskIds.contains(task.id))
@@ -356,6 +379,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
+                  unawaited(_loadCreatorNames(snapshot.data!));
                   final tasks = _prepareTasks(snapshot.data!);
                   final allTasks = snapshot.data!
                       .where(
@@ -658,7 +682,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                 ...tasks.map(
                                   (task) => TaskTile(
                                     task: task,
-
+                                    creatorName: _creatorNames[task.ownerId],
                                     onChanged: (value) =>
                                         _setDone(task, value ?? false),
                                     onEdit: () => _openTaskForm(task: task),

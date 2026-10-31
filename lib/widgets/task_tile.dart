@@ -11,9 +11,11 @@ class TaskTile extends StatelessWidget {
     required this.onChanged,
     required this.onEdit,
     required this.onDelete,
+    this.creatorName,
   });
 
   final Task task;
+  final String? creatorName;
   final ValueChanged<bool?> onChanged;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -157,6 +159,12 @@ class TaskTile extends StatelessWidget {
               label: task.dueTime!.format(context),
               color: AppColors.secondaryText,
               icon: Icons.schedule_outlined,
+            ),
+          if (creatorName != null)
+            _Badge(
+              label: 'By $creatorName',
+              color: AppColors.secondaryText,
+              icon: Icons.person_outline,
             ),
         ],
       ),

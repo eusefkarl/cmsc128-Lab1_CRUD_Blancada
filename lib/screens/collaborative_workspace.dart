@@ -190,7 +190,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
       repository: _repository,
       listName: selected?.name ?? 'Personal',
       onAccessLost: _selectedId == null ? null : _accessLost,
-
+      creatorNames: selected == null ? null : _service.displayNames,
       appBarBottom: tabs,
       listControls: selected == null ? null : _groupHeader(selected),
     );
