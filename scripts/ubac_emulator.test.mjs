@@ -141,12 +141,49 @@ test('personal UBAC and collaborative membership rules', { timeout: 180000 }, as
     await ok(read(aList, b));
     await ok(rest('POST', ':runQuery', b, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', b.uid))));
     await denied(updateList(aList, b, { memberIds: [a.uid, b.uid, c.uid] }));
-    await denied(updateList(aList, b, { memberIds: [a.uid] }));
+    await denied(updateList(aList, b, { memberIds: [b.uid] }));
     await denied(updateList(aList, b, { name: 'Hijacked' }));
     await denied(read(aList, c));
     await ok(updateList(aList, a, { memberIds: [a.uid] }));
     await denied(read(aList, b));
     await ok(updateList(aList, a, { memberIds: [a.uid, b.uid] }));
+  });
+
+  await t.test('accounts create more groups under IDs tied to their UID', async () => {
+    const second = `collaborativeLists/${'x'.repeat(20)}_${a.uid}`;
+    await ok(write(second, a, list(a.uid, { name: 'Second group' })));
+    await ok(read(second, a));
+    await denied(read(second, b));
+    // No one can take the ID of another account's default list or new lists.
+    await denied(write(`collaborativeLists/${c.uid}`, a, list(a.uid)));
+    await denied(write(`collaborativeLists/${'y'.repeat(20)}_${a.uid}`, b, list(b.uid)));
+    await denied(write(`collaborativeLists/${'y'.repeat(20)}_${b.uid}`, a, list(a.uid)));
+    await denied(write(`collaborativeLists/short_${a.uid}`, a, list(a.uid)));
+    await denied(write(`collaborativeLists/${'z'.repeat(20)}_${a.uid}`, a, list(b.uid)));
+    await denied(write(`collaborativeLists/${'z'.repeat(20)}_${a.uid}`, a, list(a.uid, { memberIds: [a.uid, b.uid] })));
+    await denied(write(`collaborativeLists/${'z'.repeat(20)}_${a.uid}`, a, list(a.uid, { name: '' })));
+    // A created group works like a default one.
+    await ok(updateList(second, a, { memberIds: [a.uid, b.uid] }));
+    await ok(read(second, b));
+    await ok(write(`${second}/tasks/first`, b, task(b.uid)));
+    await ok(read(`${second}/tasks/first`, a));
+    await denied(rest('DELETE', `/${second}`, a));
+  });
+
+  await t.test('members can leave a group but change nothing else', async () => {
+    const party = `collaborativeLists/${'p'.repeat(20)}_${a.uid}`;
+    await ok(write(party, a, list(a.uid)));
+    await ok(updateList(party, a, { memberIds: [a.uid, b.uid, c.uid] }));
+    await denied(updateList(party, b, { memberIds: [a.uid, b.uid] }));
+    await denied(updateList(party, b, { memberIds: [b.uid] }));
+    await denied(updateList(party, b, { memberIds: [a.uid, c.uid], name: 'Hijacked' }));
+    await denied(updateList(party, b, { memberIds: [a.uid, c.uid], ownerId: b.uid }));
+    await ok(updateList(party, b, { memberIds: [a.uid, c.uid] }));
+    await denied(read(party, b));
+    await denied(read(`${party}/tasks/any`, b));
+    await denied(updateList(party, b, { memberIds: [a.uid, c.uid, b.uid] }));
+    await denied(updateList(party, a, { memberIds: [c.uid] }));
+    await ok(read(party, c));
   });
 
   await t.test('member discovery and shared CRUD use current parent membership', async () => {

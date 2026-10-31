@@ -7,6 +7,7 @@ import 'package:do_it_now/screens/collaborative_workspace.dart';
 import 'package:do_it_now/services/collaboration_service.dart';
 import 'package:do_it_now/services/task_repository.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +77,10 @@ class FakeCollaboration implements CollaborationService {
   Completer<void>? namesGate;
   final renames = <String>[];
   Object? renameError;
+  final created = <String>[];
+  Object? createError;
+  final left = <String>[];
+  Object? leaveError;
   Completer<void>? actionGate;
   final lists = StreamController<List<CollaborativeList>>.broadcast();
   final scopes = <String, ScopeTasks>{};
@@ -108,6 +113,18 @@ class FakeCollaboration implements CollaborationService {
     await actionGate?.future;
     if (renameError != null) throw renameError!;
     renames.add('$listId:$name');
+  }
+
+  @override
+  Future<void> createList(String name) async {
+    if (createError != null) throw createError!;
+    created.add(name);
+  }
+
+  @override
+  Future<void> leaveList(String listId) async {
+    if (leaveError != null) throw leaveError!;
+    left.add(listId);
   }
 
   @override
@@ -174,7 +191,6 @@ void main() {
       expect(find.text('a-personal'), findsNothing);
       expect(find.text('a-joined'), findsOneWidget);
       expect(service.scopes['personal']!.cancelled, isTrue);
-      expect(find.text('Manage members'), findsNothing);
       expect(find.text('Rename group'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -204,7 +220,7 @@ void main() {
     expect(find.text('Owner · 1/20 members'), findsOneWidget);
     expect(find.text('Joined group'), findsOneWidget);
     expect(find.text('Member · 2/20 members'), findsOneWidget);
-    expect(find.byTooltip('Add task'), findsNothing);
+    expect(find.text('New task'), findsNothing);
     expect(find.byTooltip('Profile'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(ListTile, 'Own group'));
@@ -405,6 +421,8 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Own group'));
     await tester.pumpAndSettle();
     expect(find.text('All groups'), findsOneWidget);
+    await tester.tap(find.byTooltip('Group actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Manage members'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -482,7 +500,7 @@ void main() {
     first.lists.add(first.groups);
     await tester.pumpAndSettle();
     await openGroup(tester, 'Joined group');
-    await tester.tap(find.byTooltip('Add task'));
+    await tester.tap(find.text('New task'));
     await tester.pumpAndSettle();
     await tester.pumpWidget(
       MaterialApp(home: CollaborativeWorkspace(service: second)),
@@ -515,7 +533,7 @@ void main() {
       service.lists.add(service.groups);
       await tester.pumpAndSettle();
       await openGroup(tester, 'Joined group');
-      await tester.tap(find.byTooltip('Add task'));
+      await tester.tap(find.text('New task'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(picker));
       await tester.pumpAndSettle();
@@ -609,6 +627,294 @@ void main() {
     expect(find.text('Current members (2/20)'), findsOneWidget);
     expect(find.byTooltip('Remove member'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Enter in the UID field adds the member', (tester) async {
+    final service = FakeCollaboration('a');
+    addTearDown(service.close);
+    await tester.pumpWidget(
+      MaterialApp(home: CollaborativeWorkspace(service: service)),
+    );
+    await tester.pumpAndSettle();
+    service.lists.add(service.groups);
+    await tester.pumpAndSettle();
+    await openGroup(tester, 'Own group');
+    await tester.tap(find.text('Manage members'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Account UID'),
+      'member-uid',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(service.membersAdded, ['a:member-uid']);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('creating and leaving groups', () {
+    Future<void> pumpGroups(
+      WidgetTester tester,
+      FakeCollaboration service,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(home: CollaborativeWorkspace(service: service)),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add(service.groups);
+      await tester.pumpAndSettle();
+      await selectTab(tester, 'Groups');
+    }
+
+    testWidgets('a new group is named, created and announced', (tester) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+
+      await tester.tap(find.text('New group'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Group name'),
+        'Study party',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(service.created, ['Study party']);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Created Study party.'), findsOneWidget);
+      expect(find.text('Your groups'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a blank group name is rejected', (tester) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+
+      await tester.tap(find.text('New group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(service.created, isEmpty);
+      expect(find.text(invalidListNameMessage), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed create stays open with the reason', (tester) async {
+      final service = FakeCollaboration('a')
+        ..createError = StateError('Could not create that group.');
+      await pumpGroups(tester, service);
+
+      await tester.tap(find.text('New group'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Group name'),
+        'Study party',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Could not create that group.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('only members are offered Leave group', (tester) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+
+      await tester.tap(find.widgetWithText(ListTile, 'Own group'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave group'), findsNothing);
+
+      await tester.tap(find.text('All groups'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave group'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('hovering Manage members tells a member only owners can', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+
+      final manage = find.ancestor(
+        of: find.text('Manage members'),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      );
+      expect(tester.widget<TextButton>(manage).onPressed, isNull);
+      const reason = 'Only the group owner can manage members';
+      expect(find.text(reason), findsNothing);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('Manage members')));
+      await tester.pumpAndSettle();
+      expect(find.text(reason), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('owners get no Manage members tooltip', (tester) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Own group'));
+      await tester.pumpAndSettle();
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('Manage members')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Only the group owner can manage members'),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('leaving asks first and reports it as your choice', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave Joined group?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(service.left, isEmpty);
+      expect(find.text('a-joined'), findsOneWidget);
+
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Leave group'));
+      await tester.pumpAndSettle();
+      expect(service.left, ['joined']);
+      expect(find.text('Your groups'), findsOneWidget);
+
+      // The list update that follows is not reported as lost access.
+      service.lists.add([service.groups.first]);
+      await tester.pumpAndSettle();
+      expect(find.text('You left Joined group.'), findsOneWidget);
+      expect(find.text('Access to that group ended.'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a pending deletion commits before leaving', (tester) async {
+      final service = FakeCollaboration('a');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+      final tasks = service.tasksFor('joined') as ScopeTasks;
+
+      await tester.tap(find.byTooltip('Delete task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+      expect(tasks.deleted, isEmpty);
+
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Leave group'));
+      await tester.pumpAndSettle();
+
+      expect(tasks.deleted, hasLength(1));
+      expect(service.left, ['joined']);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed leave explains why', (tester) async {
+      final service = FakeCollaboration('a')
+        ..leaveError = StateError('Could not reach the server.');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Leave group'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not reach the server.'), findsOneWidget);
+      expect(find.text('You left Joined group.'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('narrow displays offer Leave group from the menu', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 760));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = FakeCollaboration('a');
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(size: const Size(320, 760)),
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: CollaborativeWorkspace(service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add(service.groups);
+      await tester.pumpAndSettle();
+      await openGroup(tester, 'Joined group');
+
+      await tester.tap(find.byTooltip('Group actions'));
+      await tester.pumpAndSettle();
+
+      // Tapping the disabled action explains it and leaves the menu open.
+      await tester.tap(find.text('Manage members'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(
+        find.text('Only the group owner can manage members'),
+        findsOneWidget,
+      );
+      expect(find.text('Leave group'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+
+      await tester.tap(find.text('Leave group'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave Joined group?'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('group tasks show who created them', (tester) async {
+      final service = FakeCollaboration('a')..names['original-creator'] = 'Ari';
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+      expect(find.text('By Ari'), findsOneWidget);
+
+      await selectTab(tester, 'Personal');
+      expect(find.text('By Ari'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed creator lookup still shows the task', (tester) async {
+      final service = FakeCollaboration('a')..namesError = StateError('down');
+      await pumpGroups(tester, service);
+      await tester.tap(find.widgetWithText(ListTile, 'Joined group'));
+      await tester.pumpAndSettle();
+      expect(find.text('a-joined'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 
   group('member names', () {
@@ -1005,6 +1311,8 @@ void main() {
       await tester.ensureVisible(card);
       await tester.pumpAndSettle();
       await tester.tap(card);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Group actions'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Manage members'));
       await tester.pumpAndSettle();
