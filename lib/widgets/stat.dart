@@ -20,6 +20,7 @@ class Stat extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontFamily: AppFonts.display,
                 color: AppColors.primaryText,
                 fontWeight: FontWeight.w700,
                 fontFeatures: const [FontFeature.tabularFigures()],

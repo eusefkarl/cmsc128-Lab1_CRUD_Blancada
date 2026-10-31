@@ -136,7 +136,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       const Center(child: StatusEyebrow('System access')),
                       const SizedBox(height: 8),
                       Text(
-                        _registering ? 'Create your account' : 'Welcome back',
+                        'DO IT NOW!',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
@@ -147,7 +147,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'DO IT NOW!',
+                        _registering
+                            ? 'Begin your awakening'
+                            : 'Welcome back, Player',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(color: AppColors.secondaryText),

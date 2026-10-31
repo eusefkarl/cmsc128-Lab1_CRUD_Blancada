@@ -29,7 +29,7 @@ class FeedbackBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.raisedSurface,
           border: Border.all(color: color),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadii.control),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

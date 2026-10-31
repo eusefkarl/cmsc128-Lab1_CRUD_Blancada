@@ -6,12 +6,15 @@ import 'package:flutter/material.dart';
 
 import '../core/enum_label.dart';
 import '../core/limits.dart';
+
 import '../models/task.dart';
 import '../services/task_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
+
 import '../widgets/stat.dart';
 import '../widgets/status_panel.dart';
+
 import '../widgets/task_form_dialog.dart';
 import '../widgets/task_tile.dart';
 import 'profile_screen.dart';
@@ -25,6 +28,7 @@ class TaskHomePage extends StatefulWidget {
     this.listControls,
     this.listName = 'Personal',
     this.onAccessLost,
+
     this.appBarBottom,
   });
 
@@ -32,6 +36,7 @@ class TaskHomePage extends StatefulWidget {
   final Widget? listControls;
   final String listName;
   final VoidCallback? onAccessLost;
+
   final PreferredSizeWidget? appBarBottom;
 
   @override
@@ -50,6 +55,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
   final Set<String> _hiddenTaskIds = {};
   final Map<String, Timer> _pendingDeletionTimers = {};
   final Map<String, Task> _pendingDeletions = {};
+
   ScaffoldMessengerState? _messenger;
   bool _disposing = false;
 
@@ -63,6 +69,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
     _pendingDeletionTimers.remove(taskId)?.cancel();
     final task = _pendingDeletions.remove(taskId);
     if (task == null) return;
+
     try {
       await _repository.deleteTask(task);
     } catch (error) {
@@ -88,6 +95,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
   @override
   void dispose() {
     _disposing = true;
+
     // Leaving a list ends Undo and commits each deletion to its original scope.
     // The repository also rejects writes if the authenticated account changed.
     if (_pendingDeletionTimers.isNotEmpty || _hiddenTaskIds.isNotEmpty) {
@@ -118,6 +126,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
 
   void _showError(Object error) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('Could not save task: $error')));
   }
@@ -162,6 +171,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: AppButtonStyles.danger,
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
@@ -182,16 +192,19 @@ class _TaskHomePageState extends State<TaskHomePage> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('"${task.title}" deleted'),
         duration: undoDeleteWindow,
+
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () {
             timer.cancel();
             _pendingDeletionTimers.remove(taskId);
             _pendingDeletions.remove(taskId);
+
             if (mounted) setState(() => _hiddenTaskIds.remove(taskId));
           },
         ),
@@ -253,15 +266,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('DO IT NOW!'),
-        actions: [
-          const ProfileButton(),
-          IconButton(
-            onPressed: () => _openTaskForm(),
-            icon: const Icon(Icons.add_task),
-            tooltip: 'Add task',
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: const [ProfileButton(), SizedBox(width: 8)],
         bottom: widget.appBarBottom,
       ),
       floatingActionButton: MediaQuery.sizeOf(context).width < 700
@@ -329,26 +334,37 @@ class _TaskHomePageState extends State<TaskHomePage> {
                 final completionRatio = allTasks.isEmpty
                     ? 0.0
                     : completedCount / allTasks.length;
+                final percent = (completionRatio * 100).round();
+
                 return LayoutBuilder(
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 700;
                     return Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1200),
+                        constraints: const BoxConstraints(
+                          maxWidth: AppLayout.maxContentWidth,
+                        ),
                         child: ListView(
                           padding: EdgeInsets.fromLTRB(
                             compact ? 16 : 24,
-                            compact ? 16 : 24,
+                            compact ? 8 : 24,
                             compact ? 16 : 24,
                             compact ? 96 : 32,
                           ),
                           children: [
                             StatusPanel(
-                              padding: 20,
+                              padding: compact ? 14 : 20,
                               child: LayoutBuilder(
                                 builder: (context, panelConstraints) {
                                   final horizontal =
                                       panelConstraints.maxWidth >= 680;
+                                  final compactMetrics = Text(
+                                    '$total total · $completedCount done · '
+                                    '${total - completedCount} open',
+                                    style: const TextStyle(
+                                      color: AppColors.secondaryText,
+                                    ),
+                                  );
                                   final metrics = Row(
                                     children: [
                                       Stat(label: 'Total', value: '$total'),
@@ -373,9 +389,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                         crossAxisAlignment:
                                             WrapCrossAlignment.center,
                                         children: [
-                                          const StatusEyebrow(
-                                            'Mission control',
-                                          ),
+                                          const StatusEyebrow('Quest log'),
                                           Text(
                                             widget.listName,
                                             style: const TextStyle(
@@ -386,9 +400,9 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        'Task completion',
+                                        '$percent% cleared',
                                         style: Theme.of(context)
                                             .textTheme
                                             .headlineSmall
@@ -396,13 +410,6 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                               fontFamily: AppFonts.display,
                                               fontWeight: FontWeight.w700,
                                             ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Track your task completion.',
-                                        style: TextStyle(
-                                          color: AppColors.secondaryText,
-                                        ),
                                       ),
                                     ],
                                   );
@@ -422,29 +429,39 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                             ),
                                           ],
                                         )
-                                      else ...[
+                                      else if (compact) ...[
+                                        title,
+                                        const SizedBox(height: 2),
+                                        compactMetrics,
+                                      ] else ...[
                                         title,
                                         const SizedBox(height: 16),
                                         metrics,
                                       ],
-                                      const SizedBox(height: 16),
+                                      SizedBox(height: compact ? 10 : 16),
                                       ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: LinearProgressIndicator(
-                                          value: completionRatio,
-                                          minHeight: 8,
-                                          semanticsLabel: 'Task completion',
-                                          semanticsValue:
-                                              '${(completionRatio * 100).round()}',
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadii.control,
                                         ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        '${(completionRatio * 100).round()}% complete',
-                                        style: const TextStyle(
-                                          color: AppColors.secondaryText,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween(end: completionRatio),
+                                          duration:
+                                              MediaQuery.disableAnimationsOf(
+                                                context,
+                                              )
+                                              ? Duration.zero
+                                              : const Duration(
+                                                  milliseconds: 500,
+                                                ),
+                                          curve: Curves.easeOutCubic,
+                                          builder: (context, value, _) =>
+                                              LinearProgressIndicator(
+                                                value: value,
+                                                minHeight: 8,
+                                                semanticsLabel:
+                                                    'Task completion',
+                                                semanticsValue: '$percent',
+                                              ),
                                         ),
                                       ),
                                     ],
@@ -452,21 +469,28 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: compact ? 12 : 24),
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
+                              padding: EdgeInsets.only(
+                                bottom: compact ? 8 : 16,
+                              ),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'Tasks',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .headlineSmall
-                                          ?.copyWith(
-                                            fontFamily: AppFonts.display,
-                                            fontWeight: FontWeight.w700,
-                                          ),
+                                      'Active quests',
+                                      style:
+                                          (compact
+                                                  ? Theme.of(context)
+                                                        .textTheme
+                                                        .titleLarge
+                                                  : Theme.of(context)
+                                                        .textTheme
+                                                        .headlineSmall)
+                                              ?.copyWith(
+                                                fontFamily: AppFonts.display,
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                     ),
                                   ),
                                   if (!compact)
@@ -577,13 +601,14 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 20),
+                            SizedBox(height: compact ? 12 : 20),
                             if (tasks.isEmpty)
                               EmptyState(filtered: allTasks.isNotEmpty)
                             else
                               ...tasks.map(
                                 (task) => TaskTile(
                                   task: task,
+
                                   onChanged: (value) async {
                                     task.isDone = value ?? false;
                                     try {
@@ -617,7 +642,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
     padding: const EdgeInsets.only(left: 10, right: 6),
     decoration: BoxDecoration(
       color: AppColors.raisedSurface,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadii.control),
       border: Border.all(color: AppColors.controlBorder),
     ),
     child: Row(

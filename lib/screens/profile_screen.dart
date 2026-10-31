@@ -50,6 +50,8 @@ class _ProfileButtonState extends State<ProfileButton> {
     ),
     icon: CircleAvatar(
       radius: 14,
+      backgroundColor: AppColors.purple,
+      foregroundColor: AppColors.onPurple,
       child: StreamBuilder<String?>(
         stream: _names,
         initialData: _initialName,
@@ -477,8 +479,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                       children: [
                         CircleAvatar(
                           radius: 30,
-                          backgroundColor: const Color(0xFF352554),
-                          foregroundColor: AppColors.primaryText,
+                          backgroundColor: AppColors.purple,
+                          foregroundColor: AppColors.onPurple,
                           child: Text(
                             (displayName.isEmpty ? '?' : displayName[0])
                                 .toUpperCase(),
@@ -490,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const StatusEyebrow('Player profile'),
+                              const StatusEyebrow('Status window'),
                               const SizedBox(height: 4),
                               Text(
                                 displayName.isEmpty ? 'Profile' : displayName,
@@ -529,7 +531,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           Text(
                             'Account details',
                             style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                                ?.copyWith(
+                                  fontFamily: AppFonts.display,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
@@ -585,7 +590,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           Text(
                             'Email address',
                             style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                                ?.copyWith(
+                                  fontFamily: AppFonts.display,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 16),
                           if (_hasPasswordProvider)
@@ -652,6 +660,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           if (_hasPasswordProvider) ...[
                             const SizedBox(height: 16),
                             FilledButton.tonal(
+                              style: AppButtonStyles.secondary,
                               onPressed: _busy ? null : _sendEmailVerification,
                               child: const Text('Send verification email'),
                             ),
@@ -676,7 +685,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           Text(
                             'Change password',
                             style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                                ?.copyWith(
+                                  fontFamily: AppFonts.display,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 16),
                           if (!_hasPasswordProvider) ...[
