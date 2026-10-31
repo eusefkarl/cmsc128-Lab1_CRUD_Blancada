@@ -486,6 +486,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                   icon: Icons.sort,
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<TaskSortOption>(
+                                      isExpanded: true,
                                       value: _sortOption,
                                       style: const TextStyle(
                                         color: AppColors.primaryText,
@@ -514,6 +515,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                   icon: Icons.sell_outlined,
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<String>(
+                                      isExpanded: true,
                                       value: _categoryFilter?.name ?? 'all',
                                       style: const TextStyle(
                                         color: AppColors.primaryText,
@@ -545,6 +547,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                   icon: Icons.flag_outlined,
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<String>(
+                                      isExpanded: true,
                                       value: _priorityFilter?.name ?? 'all',
                                       style: const TextStyle(
                                         color: AppColors.primaryText,
@@ -607,23 +610,24 @@ class _TaskHomePageState extends State<TaskHomePage> {
     );
   }
 
-  Widget _controlShell({required IconData icon, required Widget child}) =>
-      Container(
-        padding: const EdgeInsets.only(left: 10, right: 6),
-        decoration: BoxDecoration(
-          color: AppColors.raisedSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.controlBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ExcludeSemantics(
-              child: Icon(icon, size: 18, color: AppColors.cyan),
-            ),
-            const SizedBox(width: 6),
-            child,
-          ],
-        ),
-      );
+  Widget _controlShell({
+    required IconData icon,
+    required Widget child,
+  }) => Container(
+    padding: const EdgeInsets.only(left: 10, right: 6),
+    decoration: BoxDecoration(
+      color: AppColors.raisedSurface,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.controlBorder),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ExcludeSemantics(child: Icon(icon, size: 18, color: AppColors.cyan)),
+        const SizedBox(width: 6),
+        // Natural width when it fits; otherwise the label wraps inside.
+        Flexible(child: IntrinsicWidth(child: child)),
+      ],
+    ),
+  );
 }
