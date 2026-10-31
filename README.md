@@ -242,23 +242,28 @@ collaborativeLists/{listId}/tasks/{taskId}
   priority      string       low, medium, or high
   category      string       school, personal, or others
   isDone        boolean      completion state
+
+publicProfiles/{uid}
+  displayName   string       name other accounts can see; maximum 256 characters
 ```
 
-Each account has a deterministic default collaborative list. Initialization is idempotent and must not overwrite an existing list. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. Shared task `ownerId` records its creator and cannot be changed. A removed member loses access because rules check current membership on each request.
+Each account has a deterministic default collaborative list, named "My group" until its owner renames it. Initialization is idempotent and must not overwrite an existing list. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. `publicProfiles/{uid}` holds only the display name, kept apart from `users/{uid}` because rules cannot hide that document's email field. The app writes it on registration and on each profile sync, which also creates it for existing accounts the next time they open the app. Shared task `ownerId` records its creator and cannot be changed. A removed member loses access because rules check current membership on each request.
 
 ### Access matrix
 
 | Data or operation | Signed-out user | Personal task owner | Current collaborative-list member | List owner | Non-member |
 | --- | --- | --- | --- | --- | --- |
 | Read or change `users/{uid}` profile | Denied | Own profile only | Own profile only | Own profile only | Denied |
+| Read `publicProfiles/{uid}` by UID | Denied | Allowed | Allowed | Allowed | Allowed; listing is denied |
+| Change `publicProfiles/{uid}` | Denied | Own only | Own only | Own only | Own only |
 | Read or change `tasks/{taskId}` | Denied | Own tasks only | Own personal tasks only | Own personal tasks only | Denied |
 | Read a collaborative list and its tasks | Denied | If a current member | Allowed | Allowed | Denied, including guessed IDs |
 | Create, update, or delete a collaborative task | Denied | If a current member | Allowed; creator `ownerId` stays immutable | Allowed; creator `ownerId` stays immutable | Denied |
 | Change list name or membership | Denied | Denied unless also owner | Denied | Owner only; UID membership is updated directly under Firestore rules | Denied |
 
-The dashboard has **Personal** and **Groups** tabs. The **Groups** tab lists each group the account owns or has joined and shows the account's UID with a **Copy UID** action. Opening a group shows its tasks and, for the owner, **Manage members**.
+The dashboard has **Personal** and **Groups** tabs. The **Groups** tab lists each group the account owns or has joined and shows the account's UID with a **Copy UID** action. Opening a group shows its tasks and, for the owner, **Manage members** and **Rename group**.
 
-Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which that account can copy from its **Groups** tab or read in **Profile -> Account details**. **Manage members** lists the current member UIDs and removes any of them, including a mistyped UID, because a well-formed UID is not checked against existing accounts when it is added. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
+Only the list owner may add or remove members, and the owner cannot be removed. The owner enters the other account's UID, which that account can copy from its **Groups** tab or read in **Profile -> Account details**. **Manage members** lists members by display name and can remove any of them. A UID with no public profile is shown as **Unknown account** with the UID, because a well-formed UID is not checked against existing accounts when it is added; this covers a mistyped UID and an account that has not opened the app since public profiles were added. Membership is a direct Firestore update to `memberIds`; rules require the caller to own the list, reject duplicate UIDs, and cap the list at 20 UIDs including the owner. There is no email lookup, no verified-email requirement for invitations, and no Cloud Function to deploy. Because UIDs are opaque, the invited account must share its UID with the owner first.
 
 ### Emulator setup and checks
 
@@ -293,7 +298,7 @@ The second command verifies login and restored list membership and task data aft
 
 ### Deploying on the Spark plan
 
-The app and its Firestore rules can be deployed without Cloud Functions. Invitations are UID-based and write directly to `memberIds`, so the project can stay on Firebase's free Spark plan subject to its Firestore quotas. Deploy only the rules and the Flutter build:
+The app and its Firestore rules can be deployed without Cloud Functions. Invitations are UID-based and write directly to `memberIds`, so the project can stay on Firebase's free Spark plan subject to its Firestore quotas. Deploy only the rules and the Flutter build, rules first, because the app writes `publicProfiles` and needs rules that allow it:
 
 ```powershell
 firebase deploy --only firestore:rules --project doitnow-c26f9
