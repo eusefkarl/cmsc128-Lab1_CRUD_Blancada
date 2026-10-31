@@ -7,6 +7,7 @@ import '../core/validation.dart';
 import '../models/collaborative_list.dart';
 import '../services/collaboration_service.dart';
 import '../services/task_repository.dart';
+import '../theme/app_theme.dart';
 import 'groups_page.dart';
 import 'task_home_page.dart';
 
@@ -211,8 +212,8 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
                 if (owner)
                   TextButton.icon(
                     onPressed: () => _showMemberDialog(list),
-                    icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Add member'),
+                    icon: const Icon(Icons.manage_accounts_outlined),
+                    label: const Text('Manage members'),
                   ),
               ],
             ),
@@ -226,11 +227,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
     final service = _service;
     final route = DialogRoute<void>(
       context: context,
-      builder: (_) => _AddMemberDialog(
-        listName: list.name,
-        service: service,
-        listId: list.id,
-      ),
+      builder: (_) => _MembersDialog(list: list, service: service),
     );
     _memberDialog = route;
     await Navigator.of(context).push(route);
@@ -238,22 +235,20 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   }
 }
 
-class _AddMemberDialog extends StatefulWidget {
-  const _AddMemberDialog({
-    required this.listName,
-    required this.service,
-    required this.listId,
-  });
-  final String listName;
-  final String listId;
+class _MembersDialog extends StatefulWidget {
+  const _MembersDialog({required this.list, required this.service});
+  final CollaborativeList list;
   final CollaborationService service;
   @override
-  State<_AddMemberDialog> createState() => _AddMemberDialogState();
+  State<_MembersDialog> createState() => _MembersDialogState();
 }
 
-class _AddMemberDialogState extends State<_AddMemberDialog> {
+class _MembersDialogState extends State<_MembersDialog> {
   final _memberUid = TextEditingController();
   final _form = GlobalKey<FormState>();
+  final _result = GlobalKey();
+  late final List<String> _members = List.of(widget.list.memberIds);
+  String? _confirmingRemoval;
   bool _busy = false;
   String? _message;
 
@@ -281,46 +276,130 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+      // Removing from a long list can leave the result scrolled out of view.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final result = _result.currentContext;
+        if (result != null) unawaited(Scrollable.ensureVisible(result));
+      });
     }
+  }
+
+  void _add() {
+    if (!_form.currentState!.validate()) return;
+    final memberUid = _memberUid.text.trim();
+    _perform(() async {
+      final result = await widget.service.addMember(widget.list.id, memberUid);
+      if (!_members.contains(memberUid)) _members.add(memberUid);
+      return result == 'already-member'
+          ? 'This account is already a member.'
+          : 'Member added.';
+    });
+  }
+
+  void _remove(String memberUid) => _perform(() async {
+    await widget.service.removeMember(widget.list.id, memberUid);
+    _members.remove(memberUid);
+    _confirmingRemoval = null;
+    return 'Member removed.';
+  });
+
+  Widget _memberRow(String member) {
+    final isOwner = member == widget.list.ownerId;
+    final confirming = member == _confirmingRemoval;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(isOwner ? '$member (owner)' : member)),
+              if (!isOwner && !confirming)
+                IconButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                          _confirmingRemoval = member;
+                          _message = null;
+                        }),
+                  icon: const Icon(Icons.person_remove_outlined),
+                  tooltip: 'Remove member',
+                ),
+            ],
+          ),
+          // Confirmed inline: _closeMemberDialog only removes this one route.
+          if (confirming)
+            Wrap(
+              spacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('They lose access right away.'),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() => _confirmingRemoval = null),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : () => _remove(member),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.highPriority,
+                  ),
+                  child: const Text('Remove'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text('Add member to ${widget.listName}'),
+    scrollable: true,
+    title: Text('Members of ${widget.list.name}'),
     content: SizedBox(
       width: 420,
-      child: SingleChildScrollView(
-        child: Form(
-          key: _form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Enter the account UID of a registered user. They can copy it from their Groups tab. Members can create, edit and delete tasks in this group.',
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Enter the account UID of a registered user. They can copy it from their Groups tab. Members can create, edit and delete tasks in this group.',
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _memberUid,
+              enabled: !_busy,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Account UID'),
+              validator: (value) => isValidAccountUid(value ?? '')
+                  ? null
+                  : 'Enter a valid account UID.',
+            ),
+            if (_busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _memberUid,
-                enabled: !_busy,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: 'Account UID'),
-                validator: (value) => isValidAccountUid(value ?? '')
-                    ? null
-                    : 'Enter a valid account UID.',
+            if (_message != null)
+              Padding(
+                key: _result,
+                padding: const EdgeInsets.only(top: 12),
+                child: Semantics(liveRegion: true, child: Text(_message!)),
               ),
-              if (_busy)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_message != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_message!),
-                ),
-            ],
-          ),
+            const SizedBox(height: 16),
+            Text(
+              'Current members (${_members.length}/$maxListMembers)',
+              style: const TextStyle(
+                color: AppColors.primaryText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            ..._members.map(_memberRow),
+          ],
         ),
       ),
     ),
@@ -330,20 +409,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         child: const Text('Close'),
       ),
       FilledButton(
-        onPressed: _busy
-            ? null
-            : () {
-                if (!_form.currentState!.validate()) return;
-                _perform(() async {
-                  final result = await widget.service.addMember(
-                    widget.listId,
-                    _memberUid.text,
-                  );
-                  return result == 'already-member'
-                      ? 'This account is already a member.'
-                      : 'Member added.';
-                });
-              },
+        onPressed: _busy ? null : _add,
         child: const Text('Add member'),
       ),
     ],

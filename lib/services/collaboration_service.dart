@@ -12,6 +12,7 @@ abstract interface class CollaborationService {
   Stream<List<CollaborativeList>> watchLists();
   TaskRepository tasksFor(String? listId);
   Future<String> addMember(String listId, String memberUid);
+  Future<void> removeMember(String listId, String memberUid);
 }
 
 class FirebaseCollaborationService implements CollaborationService {
@@ -90,19 +91,7 @@ class FirebaseCollaborationService implements CollaborationService {
 
     final document = _firestore.collection('collaborativeLists').doc(listId);
     return _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(document);
-      if (!snapshot.exists || snapshot.data()?['ownerId'] != uid) {
-        throw StateError('You must own this list to add members.');
-      }
-      final storedMembers = snapshot.data()!['memberIds'];
-      if (storedMembers is! List ||
-          storedMembers.any((member) => member is! String)) {
-        throw StateError('This list has invalid membership data.');
-      }
-      final members = storedMembers.cast<String>();
-      if (!members.contains(uid)) {
-        throw StateError('This list has invalid membership data.');
-      }
+      final members = _ownedMembers(await transaction.get(document));
       if (members.contains(cleaned)) return 'already-member';
       if (members.length >= maxListMembers) {
         throw StateError('This list already has $maxListMembers members.');
@@ -113,5 +102,36 @@ class FirebaseCollaborationService implements CollaborationService {
       });
       return 'added';
     });
+  }
+
+  @override
+  Future<void> removeMember(String listId, String memberUid) async {
+    _checkAccount();
+    final document = _firestore.collection('collaborativeLists').doc(listId);
+    await _firestore.runTransaction((transaction) async {
+      final members = _ownedMembers(await transaction.get(document));
+      if (memberUid == uid) throw StateError('The owner cannot be removed.');
+      if (!members.contains(memberUid)) return;
+      transaction.update(document, {
+        'memberIds': members.where((member) => member != memberUid).toList(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  List<String> _ownedMembers(DocumentSnapshot<Map<String, dynamic>> snapshot) {
+    if (!snapshot.exists || snapshot.data()?['ownerId'] != uid) {
+      throw StateError('You must own this list to change its members.');
+    }
+    final storedMembers = snapshot.data()!['memberIds'];
+    if (storedMembers is! List ||
+        storedMembers.any((member) => member is! String)) {
+      throw StateError('This list has invalid membership data.');
+    }
+    final members = storedMembers.cast<String>();
+    if (!members.contains(uid)) {
+      throw StateError('This list has invalid membership data.');
+    }
+    return members;
   }
 }
