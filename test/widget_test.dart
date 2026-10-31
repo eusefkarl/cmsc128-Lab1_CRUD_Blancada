@@ -182,7 +182,7 @@ void main() {
 
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
-    expect(find.text('Quest cleared: Crud test 1'), findsOneWidget);
+    expect(find.text('+30 XP · Quest cleared: Crud test 1'), findsOneWidget);
 
     await tester.pump(systemNoticeDuration);
     await tester.pumpAndSettle();
@@ -216,8 +216,92 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Quest cleared'), findsNothing);
-
+    expect(find.text('10 / 100 XP'), findsOneWidget);
     expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isFalse);
+  });
+
+  testWidgets('completing and reopening a task moves the XP', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: TaskHomePage(repository: FakeTaskRepository())),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Level 1'), findsOneWidget);
+    expect(find.text('10 / 100 XP'), findsOneWidget);
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(find.text('40 / 100 XP'), findsOneWidget);
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(find.text('10 / 100 XP'), findsOneWidget);
+  });
+
+  testWidgets('crossing a level threshold announces the new level', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = FakeTaskRepository();
+    for (final id in ['three', 'four']) {
+      repository._tasks.add(
+        Task(
+          title: 'Done $id',
+          details: '',
+          id: id,
+          createdAt: DateTime(2026, 8, 1),
+          priority: TaskPriority.high,
+          isDone: true,
+        ),
+      );
+    }
+    await tester.pumpWidget(
+      MaterialApp(home: TaskHomePage(repository: repository)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('70 / 100 XP'), findsOneWidget);
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pump();
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Level 2 reached · +30 XP · Quest cleared: Crud test 1'),
+      findsOneWidget,
+    );
+    expect(find.text('Level 2'), findsOneWidget);
+    expect(find.text('0 / 200 XP'), findsOneWidget);
+  });
+
+  testWidgets('deleting a completed task takes its XP until Undo', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: TaskHomePage(repository: FakeTaskRepository())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    expect(find.text('0 / 100 XP'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('10 / 100 XP'), findsOneWidget);
   });
 
   testWidgets('the notice does not disturb an active Undo bar', (
@@ -246,7 +330,7 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Quest cleared: Crud test 3'), findsOneWidget);
+    expect(find.text('+20 XP · Quest cleared: Crud test 3'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
   });
 
