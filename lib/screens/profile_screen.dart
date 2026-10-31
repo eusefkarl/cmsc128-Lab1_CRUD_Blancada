@@ -8,6 +8,33 @@ import '../theme/app_theme.dart';
 import '../widgets/feedback_banner.dart';
 import '../widgets/status_panel.dart';
 
+/// App bar entry to [ProfileScreen], showing the account's initial.
+class ProfileButton extends StatelessWidget {
+  const ProfileButton({super.key});
+
+  String _userInitial() {
+    try {
+      final name = FirebaseAuth.instance.currentUser?.displayName;
+      return (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+    } on FirebaseException {
+      return '?';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    onPressed: () => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    ),
+    icon: CircleAvatar(
+      radius: 14,
+      child: Text(_userInitial(), style: const TextStyle(fontSize: 12)),
+    ),
+    tooltip: 'Profile',
+  );
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.auth});
 
@@ -480,7 +507,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             decoration: const InputDecoration(
                               labelText: 'Account UID',
                               helperText:
-                                  'Share this UID with a list owner so they can add you.',
+                                  'Share this UID with a group owner so they can add you.',
                             ),
                           ),
                           const SizedBox(height: 16),

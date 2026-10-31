@@ -25,12 +25,14 @@ class TaskHomePage extends StatefulWidget {
     this.listControls,
     this.listName = 'Personal',
     this.onAccessLost,
+    this.appBarBottom,
   });
 
   final TaskRepository? repository;
   final Widget? listControls;
   final String listName;
   final VoidCallback? onAccessLost;
+  final PreferredSizeWidget? appBarBottom;
 
   @override
   State<TaskHomePage> createState() => _TaskHomePageState();
@@ -246,32 +248,13 @@ class _TaskHomePageState extends State<TaskHomePage> {
     TaskSortOption.tag => 'Category',
   };
 
-  String _userInitial() {
-    try {
-      final name = FirebaseAuth.instance.currentUser?.displayName;
-      return (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
-    } on FirebaseException {
-      return '?';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('DO IT NOW!'),
         actions: [
-          IconButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-            icon: CircleAvatar(
-              radius: 14,
-              child: Text(_userInitial(), style: const TextStyle(fontSize: 12)),
-            ),
-            tooltip: 'Profile',
-          ),
+          const ProfileButton(),
           IconButton(
             onPressed: () => _openTaskForm(),
             icon: const Icon(Icons.add_task),
@@ -279,6 +262,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
           ),
           const SizedBox(width: 8),
         ],
+        bottom: widget.appBarBottom,
       ),
       floatingActionButton: MediaQuery.sizeOf(context).width < 700
           ? FloatingActionButton.extended(

@@ -7,9 +7,14 @@ import '../core/validation.dart';
 import '../models/collaborative_list.dart';
 import '../services/collaboration_service.dart';
 import '../services/task_repository.dart';
+import 'groups_page.dart';
 import 'task_home_page.dart';
 
-/// A fresh keyed task screen owns each scope's stream, forms and Undo timers.
+const int _personalTab = 0;
+const int _groupsTab = 1;
+
+/// Hosts the Personal and Groups tabs. A fresh keyed task screen owns each
+/// scope's stream, forms and Undo timers.
 class CollaborativeWorkspace extends StatefulWidget {
   const CollaborativeWorkspace({super.key, this.service});
   final CollaborationService? service;
@@ -18,7 +23,9 @@ class CollaborativeWorkspace extends StatefulWidget {
   State<CollaborativeWorkspace> createState() => _CollaborativeWorkspaceState();
 }
 
-class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
+class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   late CollaborationService _service;
   StreamSubscription<List<CollaborativeList>>? _subscription;
   List<CollaborativeList> _lists = [];
@@ -42,13 +49,17 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 2, vsync: this);
     _start();
   }
 
   @override
   void didUpdateWidget(CollaborativeWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.service != widget.service) _start();
+    if (oldWidget.service != widget.service) {
+      _tabs.index = _personalTab;
+      _start();
+    }
   }
 
   void _start() {
@@ -70,16 +81,14 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
           _lists = lists;
           if (revoked) _setScope(null);
         });
-        if (revoked) {
-          _notify('Access to that list ended. Personal is now active.');
-        }
+        if (revoked) _notify('Access to that group ended.');
       },
       onError: (Object error) {
         if (!mounted || generation != _generation) return;
         setState(() {
           _lists = [];
           _setScope(null);
-          _error = 'Collaborative lists are unavailable. Retry to reconnect.';
+          _error = 'Groups are unavailable. Retry to reconnect.';
         });
       },
     );
@@ -106,11 +115,12 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
     _closeMemberDialog();
     ++_generation;
     unawaited(_subscription?.cancel());
+    _tabs.dispose();
     super.dispose();
   }
 
   void _notify(String message) {
-    // TaskHomePage owns the scaffold below this context.
+    // The active tab's page owns the scaffold below this context.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
@@ -128,13 +138,39 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
   void _accessLost() {
     if (!mounted || _selectedId == null) return;
     setState(() => _setScope(null));
-    _notify('Access to that list ended. Personal is now active.');
+    _notify('Access to that group ended.');
   }
+
+  // Any tab tap closes the open group, so tapping Groups inside a group returns
+  // to the picker and leaving a group disposes its task screen.
+  void _selectTab(int _) => setState(() => _setScope(null));
 
   @override
   Widget build(BuildContext context) {
+    // Fixed tabs cannot scroll out of reach on a narrow display.
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    final tabs = TabBar(
+      controller: _tabs,
+      isScrollable: !compact,
+      tabAlignment: compact ? TabAlignment.fill : TabAlignment.start,
+      onTap: _selectTab,
+      tabs: const [
+        Tab(text: 'Personal'),
+        Tab(text: 'Groups'),
+      ],
+    );
     final selected = _lists.where((list) => list.id == _selectedId).firstOrNull;
-    final owner = selected?.ownerId == _service.uid;
+    if (_tabs.index == _groupsTab && selected == null) {
+      return GroupsPage(
+        uid: _service.uid,
+        lists: _lists,
+        initializing: _initializing,
+        error: _error,
+        onRetry: () => setState(_start),
+        onOpen: (list) => setState(() => _setScope(list.id)),
+        appBarBottom: tabs,
+      );
+    }
     return TaskHomePage(
       key: ValueKey(
         '${_service.uid}:${_selectedId ?? 'personal'}:$_generation',
@@ -142,67 +178,45 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace> {
       repository: _repository,
       listName: selected?.name ?? 'Personal',
       onAccessLost: _selectedId == null ? null : _accessLost,
-      listControls: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DropdownButtonFormField<String>(
-              key: ValueKey(_selectedId),
-              initialValue: _selectedId ?? '',
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Active list'),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('Personal')),
-                ..._lists.map(
-                  (list) => DropdownMenuItem(
-                    value: list.id,
-                    child: Text(
-                      '${list.name} · ${list.ownerId == _service.uid ? 'Owned' : 'Joined'}'
-                      '${_lists.where((other) => other.name == list.name).length > 1 ? ' · ${list.id.substring(0, list.id.length < 8 ? list.id.length : 8)}' : ''}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+      appBarBottom: tabs,
+      listControls: selected == null ? null : _groupHeader(selected),
+    );
+  }
+
+  Widget _groupHeader(CollaborativeList list) {
+    final owner = list.ownerId == _service.uid;
+    final inset = MediaQuery.sizeOf(context).width < 700 ? 16.0 : 24.0;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(inset - 12, 8, inset, 0),
+          child: SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              spacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(() => _setScope(null)),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('All groups'),
                 ),
+                Text(
+                  owner
+                      ? 'Owner · ${list.memberIds.length}/'
+                            '$maxListMembers members'
+                      : 'Member · shared task access',
+                ),
+                if (owner)
+                  TextButton.icon(
+                    onPressed: () => _showMemberDialog(list),
+                    icon: const Icon(Icons.person_add_alt),
+                    label: const Text('Add member'),
+                  ),
               ],
-              onChanged: (id) =>
-                  setState(() => _setScope(id == '' ? null : id)),
             ),
-            if (_initializing)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Preparing your group',
-              ),
-            if (_error != null)
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(_error!),
-                  TextButton(
-                    onPressed: () => setState(_start),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            if (selected != null)
-              Wrap(
-                spacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    owner
-                        ? 'Owner · ${selected.memberIds.length}/'
-                              '$maxListMembers members'
-                        : 'Member · shared task access',
-                  ),
-                  if (owner)
-                    TextButton.icon(
-                      onPressed: () => _showMemberDialog(selected),
-                      icon: const Icon(Icons.person_add_alt),
-                      label: const Text('Add member'),
-                    ),
-                ],
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -283,7 +297,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Enter the account UID of a registered user. Find it in their Profile tab under Account details. Members can create, edit and delete tasks in this list.',
+                'Enter the account UID of a registered user. They can copy it from their Groups tab. Members can create, edit and delete tasks in this group.',
               ),
               const SizedBox(height: 12),
               TextFormField(

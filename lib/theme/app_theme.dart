@@ -70,6 +70,14 @@ abstract final class AppTheme {
           side: const BorderSide(color: AppColors.divider),
         ),
       ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: AppColors.primaryText,
+        unselectedLabelColor: AppColors.secondaryText,
+        labelStyle: TextStyle(fontWeight: FontWeight.w700),
+        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+        indicatorColor: AppColors.cyan,
+        dividerColor: Colors.transparent,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.raisedSurface,
