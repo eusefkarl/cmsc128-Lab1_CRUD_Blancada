@@ -230,6 +230,8 @@ class _TaskHomePageState extends State<TaskHomePage> {
         )
         .toList();
     tasks.sort((first, second) {
+      // Open tasks stay above completed ones under every sort.
+      if (first.isDone != second.isDone) return first.isDone ? 1 : -1;
       switch (_sortOption) {
         case TaskSortOption.dateAdded:
           return (second.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -612,7 +614,13 @@ class _TaskHomePageState extends State<TaskHomePage> {
                             ),
                             SizedBox(height: compact ? 12 : 20),
                             if (tasks.isEmpty)
-                              EmptyState(filtered: allTasks.isNotEmpty)
+                              EmptyState(
+                                filtered: allTasks.isNotEmpty,
+                                onClearFilters: () => setState(() {
+                                  _priorityFilter = null;
+                                  _categoryFilter = null;
+                                }),
+                              )
                             else
                               ...tasks.map(
                                 (task) => TaskTile(
