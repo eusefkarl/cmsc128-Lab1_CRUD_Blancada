@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import '../core/action_error.dart';
 import '../core/enum_label.dart';
 import '../core/limits.dart';
-
+import '../core/progression.dart';
 import '../models/task.dart';
 import '../services/task_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
-
+import '../widgets/level_meter.dart';
 import '../widgets/stat.dart';
 import '../widgets/status_panel.dart';
 import '../widgets/system_notice.dart';
@@ -233,17 +233,23 @@ class _TaskHomePageState extends State<TaskHomePage> {
     if (mounted) setState(() => _notice = message);
   }
 
-  Future<void> _setDone(Task task, bool done) async {
+  Future<void> _setDone(Task task, bool done, List<Task> listTasks) async {
     final wasDone = task.isDone;
     final cleared = done && !wasDone;
-
+    final levelBefore = Progression.fromTasks(listTasks).level;
     task.isDone = done;
-    if (cleared) _setNotice('Quest cleared: ${task.title}');
-
+    if (cleared) {
+      final level = Progression.fromTasks(listTasks).level;
+      // The XP comes first because a long title is cut off at the end.
+      final reward = level > levelBefore
+          ? 'Level $level reached · +${xpForTask(task)} XP'
+          : '+${xpForTask(task)} XP';
+      _setNotice('$reward · Quest cleared: ${task.title}');
+    }
     try {
       await _repository.updateTask(task);
     } catch (error) {
-      // No snapshot follows a failed write, so the task must be restored here.
+      // No snapshot follows a failed write, so the XP must be taken back here.
       if (mounted) setState(() => task.isDone = wasDone);
       if (cleared) _setNotice(null);
       _showError(error);
@@ -399,7 +405,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                       ? 0.0
                       : completedCount / allTasks.length;
                   final percent = (completionRatio * 100).round();
-
+                  final progression = Progression.fromTasks(allTasks);
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final compact = constraints.maxWidth < 700;
@@ -503,31 +509,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                           metrics,
                                         ],
                                         SizedBox(height: compact ? 10 : 16),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            AppRadii.control,
-                                          ),
-                                          child: TweenAnimationBuilder<double>(
-                                            tween: Tween(end: completionRatio),
-                                            duration:
-                                                MediaQuery.disableAnimationsOf(
-                                                  context,
-                                                )
-                                                ? Duration.zero
-                                                : const Duration(
-                                                    milliseconds: 500,
-                                                  ),
-                                            curve: Curves.easeOutCubic,
-                                            builder: (context, value, _) =>
-                                                LinearProgressIndicator(
-                                                  value: value,
-                                                  minHeight: 8,
-                                                  semanticsLabel:
-                                                      'Task completion',
-                                                  semanticsValue: '$percent',
-                                                ),
-                                          ),
-                                        ),
+                                        LevelMeter(progression: progression),
                                       ],
                                     );
                                   },
@@ -686,8 +668,11 @@ class _TaskHomePageState extends State<TaskHomePage> {
                                   (task) => TaskTile(
                                     task: task,
                                     creatorName: _creatorNames[task.ownerId],
-                                    onChanged: (value) =>
-                                        _setDone(task, value ?? false),
+                                    onChanged: (value) => _setDone(
+                                      task,
+                                      value ?? false,
+                                      allTasks,
+                                    ),
                                     onEdit: () => _openTaskForm(task: task),
                                     onDelete: () => _deleteTask(task),
                                   ),
