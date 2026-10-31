@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:do_it_now/core/validation.dart';
 import 'package:do_it_now/models/collaborative_list.dart';
 import 'package:do_it_now/models/task.dart';
 import 'package:do_it_now/screens/collaborative_workspace.dart';
@@ -70,6 +71,11 @@ class FakeCollaboration implements CollaborationService {
   final membersAdded = <String>[];
   final membersRemoved = <String>[];
   Object? removeError;
+  final names = <String, String>{};
+  Object? namesError;
+  Completer<void>? namesGate;
+  final renames = <String>[];
+  Object? renameError;
   final lists = StreamController<List<CollaborativeList>>.broadcast();
   final scopes = <String, ScopeTasks>{};
   bool initialized = false;
@@ -93,6 +99,22 @@ class FakeCollaboration implements CollaborationService {
   Future<void> removeMember(String listId, String memberUid) async {
     if (removeError != null) throw removeError!;
     membersRemoved.add('$listId:$memberUid');
+  }
+
+  @override
+  Future<void> renameList(String listId, String name) async {
+    if (renameError != null) throw renameError!;
+    renames.add('$listId:$name');
+  }
+
+  @override
+  Future<Map<String, String>> displayNames(List<String> uids) async {
+    await namesGate?.future;
+    if (namesError != null) throw namesError!;
+    return {
+      for (final id in uids)
+        if (names[id] != null) id: names[id]!,
+    };
   }
 
   List<CollaborativeList> get groups => [
@@ -150,6 +172,7 @@ void main() {
       expect(find.text('a-joined'), findsOneWidget);
       expect(service.scopes['personal']!.cancelled, isTrue);
       expect(find.text('Manage members'), findsNothing);
+      expect(find.text('Rename group'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -585,9 +608,241 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  group('member names', () {
+    Future<void> openMembersOf(
+      WidgetTester tester,
+      FakeCollaboration service,
+      List<String> memberIds, {
+      bool settle = true,
+    }) async {
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(home: CollaborativeWorkspace(service: service)),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add([
+        CollaborativeList(
+          id: 'a',
+          ownerId: 'a',
+          name: 'Own group',
+          memberIds: memberIds,
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      await openGroup(tester, 'Own group');
+      await tester.tap(find.text('Manage members'));
+      if (settle) await tester.pumpAndSettle();
+    }
+
+    testWidgets('members are listed by display name instead of UID', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a')
+        ..names.addAll({'a': 'Ari', 'member-uid': 'Bo'});
+      await openMembersOf(tester, service, ['a', 'member-uid']);
+      expect(find.text('Ari (owner)'), findsOneWidget);
+      expect(find.text('Bo'), findsOneWidget);
+      expect(find.text('member-uid'), findsNothing);
+      expect(find.textContaining('Unknown account'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a UID with no profile is flagged so a typo can be spotted', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a')..names['a'] = 'Ari';
+      await openMembersOf(tester, service, ['a', 'typo-uid']);
+      expect(find.text('Unknown account · typo-uid'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('members with the same name are told apart by short ID', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a')
+        ..names.addAll({
+          'a': 'Ari',
+          'first-account-uid': 'Bo',
+          'second-account-uid': 'Bo',
+        });
+      await openMembersOf(tester, service, [
+        'a',
+        'first-account-uid',
+        'second-account-uid',
+      ]);
+      expect(find.text('Ari (owner)'), findsOneWidget);
+      expect(find.text('Bo · first-ac'), findsOneWidget);
+      expect(find.text('Bo · second-a'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed lookup falls back to UIDs and says so', (
+      tester,
+    ) async {
+      final service = FakeCollaboration('a')
+        ..namesError = StateError('offline');
+      await openMembersOf(tester, service, ['a', 'member-uid']);
+      expect(
+        find.text('Member names could not be loaded, so UIDs are shown.'),
+        findsOneWidget,
+      );
+      expect(find.text('a (owner)'), findsOneWidget);
+      expect(find.text('member-uid'), findsOneWidget);
+      // A failed lookup must not claim the account is unknown.
+      expect(find.textContaining('Unknown account'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('names show a loading state until the lookup finishes', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final service = FakeCollaboration('a')
+        ..names.addAll({'a': 'Ari', 'member-uid': 'Bo'})
+        ..namesGate = gate;
+      await openMembersOf(tester, service, ['a', 'member-uid'], settle: false);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Loading name…'), findsNWidgets(2));
+      expect(find.text('member-uid'), findsNothing);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Loading name…'), findsNothing);
+      expect(find.text('Bo'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a newly added member is listed by name', (tester) async {
+      final service = FakeCollaboration('a')
+        ..names.addAll({'a': 'Ari', 'new-uid': 'Cy'});
+      await openMembersOf(tester, service, ['a']);
+      expect(find.text('Cy'), findsNothing);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Account UID'),
+        'new-uid',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add member'));
+      await tester.pumpAndSettle();
+      expect(service.membersAdded, ['a:new-uid']);
+      expect(find.text('Cy'), findsOneWidget);
+      expect(find.text('Member added.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
+
+  group('group naming', () {
+    const ownGroup = CollaborativeList(
+      id: 'a',
+      ownerId: 'a',
+      name: 'Own group',
+      memberIds: ['a'],
+    );
+    final field = find.widgetWithText(TextFormField, 'Group name');
+    final save = find.widgetWithText(FilledButton, 'Save');
+
+    Future<FakeCollaboration> openRename(WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = FakeCollaboration('a');
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(home: CollaborativeWorkspace(service: service)),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add(const [ownGroup]);
+      await tester.pumpAndSettle();
+      await openGroup(tester, 'Own group');
+      await tester.tap(find.text('Rename group'));
+      await tester.pumpAndSettle();
+      return service;
+    }
+
+    testWidgets('owners rename a group and it stays open', (tester) async {
+      final service = await openRename(tester);
+      expect(tester.widget<TextFormField>(field).controller!.text, 'Own group');
+      await tester.enterText(field, '  Study squad ');
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(service.renames, ['a:Study squad']);
+      expect(find.byType(AlertDialog), findsNothing);
+
+      service.lists.add(const [
+        CollaborativeList(
+          id: 'a',
+          ownerId: 'a',
+          name: 'Study squad',
+          memberIds: ['a'],
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.text('Study squad'), findsOneWidget);
+      expect(find.text('a-a'), findsOneWidget);
+      // The name change must not restart the task screen or its stream.
+      expect(service.scopes['a']!.cancelled, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a blank name is rejected and nothing is saved', (
+      tester,
+    ) async {
+      final service = await openRename(tester);
+      await tester.enterText(field, '   ');
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text(invalidListNameMessage), findsOneWidget);
+      expect(service.renames, isEmpty);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      // The error clears as soon as the name becomes valid, not on the next save.
+      await tester.enterText(field, 'Study squad');
+      await tester.pumpAndSettle();
+      expect(find.text(invalidListNameMessage), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed rename shows the reason and can be retried', (
+      tester,
+    ) async {
+      final service = await openRename(tester);
+      service.renameError = StateError('Rename rejected.');
+      await tester.enterText(field, 'Study squad');
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text('Rename rejected.'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      service.renameError = null;
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(service.renames, ['a:Study squad']);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('losing the group closes the rename dialog without saving', (
+      tester,
+    ) async {
+      final service = await openRename(tester);
+      await tester.enterText(field, 'Study squad');
+      service.lists.addError(StateError('offline'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(service.renames, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    test('list names are trimmed and limited like the Firestore rules', () {
+      expect(isValidListName('Study squad'), isTrue);
+      expect(isValidListName('  x  '), isTrue);
+      expect(isValidListName(''), isFalse);
+      expect(isValidListName('   '), isFalse);
+      expect(isValidListName('x' * 100), isTrue);
+      expect(isValidListName('x' * 101), isFalse);
+    });
+  });
+
   group('member removal', () {
     Future<FakeCollaboration> openMembers(WidgetTester tester) async {
-      final service = FakeCollaboration('a');
+      final service = FakeCollaboration('a')..names['a'] = 'Ari';
       addTearDown(service.close);
       await tester.pumpWidget(
         MaterialApp(home: CollaborativeWorkspace(service: service)),
@@ -612,8 +867,8 @@ void main() {
       tester,
     ) async {
       final service = await openMembers(tester);
-      expect(find.text('a (owner)'), findsOneWidget);
-      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('Ari (owner)'), findsOneWidget);
+      expect(find.text('Unknown account · typo-uid'), findsOneWidget);
       expect(find.text('Current members (2/20)'), findsOneWidget);
       // Only the other member's row can be removed, never the owner's.
       expect(find.byTooltip('Remove member'), findsOneWidget);
@@ -624,7 +879,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
       expect(service.membersRemoved, isEmpty);
-      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('Unknown account · typo-uid'), findsOneWidget);
       expect(find.text('They lose access right away.'), findsNothing);
 
       await tester.tap(find.byTooltip('Remove member'));
@@ -632,7 +887,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Remove'));
       await tester.pumpAndSettle();
       expect(service.membersRemoved, ['a:typo-uid']);
-      expect(find.text('typo-uid'), findsNothing);
+      expect(find.text('Unknown account · typo-uid'), findsNothing);
       expect(find.text('Member removed.'), findsOneWidget);
       expect(find.text('Current members (1/20)'), findsOneWidget);
       expect(find.byTooltip('Remove member'), findsNothing);
@@ -651,7 +906,7 @@ void main() {
       expect(service.membersRemoved, isEmpty);
       expect(find.text('Removal rejected.'), findsOneWidget);
       expect(find.text('Member removed.'), findsNothing);
-      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('Unknown account · typo-uid'), findsOneWidget);
       expect(find.text('Current members (2/20)'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -709,7 +964,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // The last member is reachable and the result stays visible after it.
-      final last = find.text('member-account-uid-19');
+      final last = find.text('Unknown account · member-account-uid-19');
       await tester.dragUntilVisible(
         last,
         find.byType(SingleChildScrollView),

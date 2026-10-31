@@ -128,6 +128,8 @@ test('personal UBAC and collaborative membership rules', { timeout: 180000 }, as
     await denied(updateList(aList, a, { memberIds: [b.uid] }));
     await denied(updateList(aList, a, { memberIds: [a.uid, a.uid] }));
     await ok(updateList(aList, a, { name: 'Renamed group' }));
+    await denied(updateList(aList, a, { name: '' }));
+    await denied(updateList(aList, a, { name: 'x'.repeat(101) }));
     await denied(rest('DELETE', `/${aList}`, a));
     await denied(rest('POST', ':runQuery', a, query('collaborativeLists')));
     await ok(rest('POST', ':runQuery', a, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', a.uid))));
@@ -188,5 +190,22 @@ test('personal UBAC and collaborative membership rules', { timeout: 180000 }, as
     assert.equal((await adminDb.doc(aList).get()).data().memberIds.length, 20);
     await ok(updateList(aList, a, { memberIds: [a.uid] }));
     assert.deepEqual((await adminDb.doc(aList).get()).data().memberIds, [a.uid]);
+  });
+
+  await t.test('public profiles expose only a display name to signed-in accounts', async () => {
+    const path = `publicProfiles/${a.uid}`;
+    await ok(write(path, a, { displayName: 'Owner name' }));
+    assert.equal((await read(path, b)).body.fields.displayName.stringValue, 'Owner name');
+    await denied(read(path, null));
+    await denied(write(path, b, { displayName: 'Forged' }));
+    await denied(write(path, null, { displayName: 'Forged' }));
+    await denied(write(path, a, { displayName: 'Owner name', email: a.email }));
+    await denied(write(path, a, { displayName: 123 }));
+    await denied(write(path, a, { displayName: 'x'.repeat(257) }));
+    await ok(write(path, a, { displayName: 'x'.repeat(256) }));
+    await denied(rest('DELETE', `/${path}`, a));
+    await denied(rest('POST', ':runQuery', a, query('publicProfiles')));
+    // Emails stay in the owner-only profile.
+    await denied(read(`users/${a.uid}`, b));
   });
 });
