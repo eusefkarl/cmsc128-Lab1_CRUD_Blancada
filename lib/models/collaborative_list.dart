@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// A short form of a list or account ID, for telling apart equal names.
+String shortId(String id) => id.length < 8 ? id : id.substring(0, 8);
+
 class CollaborativeList {
   const CollaborativeList({
     required this.id,

@@ -35,11 +35,11 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   String? _error;
   bool _initializing = true;
   int _generation = 0;
-  DialogRoute<void>? _memberDialog;
+  DialogRoute<void>? _groupDialog;
 
-  void _closeMemberDialog() {
-    final route = _memberDialog;
-    _memberDialog = null;
+  void _closeGroupDialog() {
+    final route = _groupDialog;
+    _groupDialog = null;
     if (route != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (route.isActive) route.navigator?.removeRoute(route);
@@ -64,7 +64,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   }
 
   void _start() {
-    _closeMemberDialog();
+    _closeGroupDialog();
     final generation = ++_generation;
     unawaited(_subscription?.cancel());
     _service = widget.service ?? FirebaseCollaborationService();
@@ -113,7 +113,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
 
   @override
   void dispose() {
-    _closeMemberDialog();
+    _closeGroupDialog();
     ++_generation;
     unawaited(_subscription?.cancel());
     _tabs.dispose();
@@ -131,7 +131,7 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   }
 
   void _setScope(String? id) {
-    _closeMemberDialog();
+    _closeGroupDialog();
     _selectedId = id;
     _repository = _service.tasksFor(id);
   }
@@ -185,7 +185,8 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
   }
 
   Widget _groupHeader(CollaborativeList list) {
-    final owner = list.ownerId == _service.uid;
+    final service = _service;
+    final owner = list.ownerId == service.uid;
     final inset = MediaQuery.sizeOf(context).width < 700 ? 16.0 : 24.0;
     return Center(
       child: ConstrainedBox(
@@ -209,12 +210,22 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
                             '$maxListMembers members'
                       : 'Member · shared task access',
                 ),
-                if (owner)
+                if (owner) ...[
                   TextButton.icon(
-                    onPressed: () => _showMemberDialog(list),
+                    onPressed: () => _showGroupDialog(
+                      (_) => _MembersDialog(list: list, service: service),
+                    ),
                     icon: const Icon(Icons.manage_accounts_outlined),
                     label: const Text('Manage members'),
                   ),
+                  TextButton.icon(
+                    onPressed: () => _showGroupDialog(
+                      (_) => _RenameGroupDialog(list: list, service: service),
+                    ),
+                    icon: const Icon(Icons.drive_file_rename_outline),
+                    label: const Text('Rename group'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -223,17 +234,19 @@ class _CollaborativeWorkspaceState extends State<CollaborativeWorkspace>
     );
   }
 
-  Future<void> _showMemberDialog(CollaborativeList list) async {
-    final service = _service;
-    final route = DialogRoute<void>(
-      context: context,
-      builder: (_) => _MembersDialog(list: list, service: service),
-    );
-    _memberDialog = route;
+  Future<void> _showGroupDialog(WidgetBuilder builder) async {
+    final route = DialogRoute<void>(context: context, builder: builder);
+    _groupDialog = route;
     await Navigator.of(context).push(route);
-    if (_memberDialog == route) _memberDialog = null;
+    if (_groupDialog == route) _groupDialog = null;
   }
 }
+
+String _actionError(Object error) => switch (error) {
+  StateError(:final message) => message,
+  FormatException(:final message) => message,
+  _ => 'Could not complete the request. Try again.',
+};
 
 class _MembersDialog extends StatefulWidget {
   const _MembersDialog({required this.list, required this.service});
@@ -248,14 +261,42 @@ class _MembersDialogState extends State<_MembersDialog> {
   final _form = GlobalKey<FormState>();
   final _result = GlobalKey();
   late final List<String> _members = List.of(widget.list.memberIds);
+  final Map<String, String> _names = {};
+  bool _loadingNames = true;
+  bool _namesFailed = false;
   String? _confirmingRemoval;
   bool _busy = false;
   String? _message;
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_loadNames(_members));
+  }
+
+  @override
   void dispose() {
     _memberUid.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadNames(List<String> uids) async {
+    try {
+      _names.addAll(await widget.service.displayNames(uids));
+    } catch (_) {
+      _namesFailed = true;
+    }
+    if (mounted) setState(() => _loadingNames = false);
+  }
+
+  String _memberLabel(String member) {
+    if (_loadingNames) return 'Loading name…';
+    final name = _names[member];
+    if (name == null) {
+      return _namesFailed ? member : 'Unknown account · $member';
+    }
+    final shared = _members.where((other) => _names[other] == name).length > 1;
+    return shared ? '$name · ${shortId(member)}' : name;
   }
 
   Future<void> _perform(Future<String> Function() action) async {
@@ -266,14 +307,8 @@ class _MembersDialogState extends State<_MembersDialog> {
     try {
       final message = await action();
       if (mounted) setState(() => _message = message);
-    } on StateError catch (error) {
-      if (mounted) setState(() => _message = error.message);
-    } on FormatException catch (error) {
-      if (mounted) setState(() => _message = error.message);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _message = 'Could not complete the request. Try again.');
-      }
+    } catch (error) {
+      if (mounted) setState(() => _message = _actionError(error));
     } finally {
       if (mounted) setState(() => _busy = false);
       // Removing from a long list can leave the result scrolled out of view.
@@ -290,6 +325,7 @@ class _MembersDialogState extends State<_MembersDialog> {
     _perform(() async {
       final result = await widget.service.addMember(widget.list.id, memberUid);
       if (!_members.contains(memberUid)) _members.add(memberUid);
+      await _loadNames([memberUid]);
       return result == 'already-member'
           ? 'This account is already a member.'
           : 'Member added.';
@@ -306,6 +342,7 @@ class _MembersDialogState extends State<_MembersDialog> {
   Widget _memberRow(String member) {
     final isOwner = member == widget.list.ownerId;
     final confirming = member == _confirmingRemoval;
+    final label = _memberLabel(member);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(
@@ -313,7 +350,11 @@ class _MembersDialogState extends State<_MembersDialog> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(isOwner ? '$member (owner)' : member)),
+              Expanded(
+                child: Text(
+                  isOwner && !_loadingNames ? '$label (owner)' : label,
+                ),
+              ),
               if (!isOwner && !confirming)
                 IconButton(
                   onPressed: _busy
@@ -327,7 +368,7 @@ class _MembersDialogState extends State<_MembersDialog> {
                 ),
             ],
           ),
-          // Confirmed inline: _closeMemberDialog only removes this one route.
+          // Confirmed inline: _closeGroupDialog only removes this one route.
           if (confirming)
             Wrap(
               spacing: 4,
@@ -398,6 +439,13 @@ class _MembersDialogState extends State<_MembersDialog> {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (_namesFailed)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Member names could not be loaded, so UIDs are shown.',
+                ),
+              ),
             ..._members.map(_memberRow),
           ],
         ),
@@ -412,6 +460,93 @@ class _MembersDialogState extends State<_MembersDialog> {
         onPressed: _busy ? null : _add,
         child: const Text('Add member'),
       ),
+    ],
+  );
+}
+
+class _RenameGroupDialog extends StatefulWidget {
+  const _RenameGroupDialog({required this.list, required this.service});
+  final CollaborativeList list;
+  final CollaborationService service;
+  @override
+  State<_RenameGroupDialog> createState() => _RenameGroupDialogState();
+}
+
+class _RenameGroupDialogState extends State<_RenameGroupDialog> {
+  late final _name = TextEditingController(text: widget.list.name);
+  final _form = GlobalKey<FormState>();
+  bool _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_busy || !_form.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await widget.service.renameList(widget.list.id, _name.text.trim());
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _message = _actionError(error);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    title: const Text('Rename group'),
+    content: SizedBox(
+      width: 420,
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _name,
+              enabled: !_busy,
+              autofocus: true,
+              maxLength: maxListNameLength,
+              autovalidateMode: AutovalidateMode.onUserInteractionIfError,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _save(),
+              decoration: const InputDecoration(labelText: 'Group name'),
+              validator: (value) =>
+                  isValidListName(value ?? '') ? null : invalidListNameMessage,
+            ),
+            if (_busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(),
+              ),
+            if (_message != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Semantics(liveRegion: true, child: Text(_message!)),
+              ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _busy ? null : _save, child: const Text('Save')),
     ],
   );
 }

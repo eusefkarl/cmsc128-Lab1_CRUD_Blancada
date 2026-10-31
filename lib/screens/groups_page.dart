@@ -44,17 +44,13 @@ class GroupsPage extends StatelessWidget {
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Every default group is named "My group", so equal names need the ID.
+  /// Every default group starts as "My group", so equal names need the ID.
   String _subtitle(CollaborativeList list) {
     final role = list.ownerId == uid ? 'Owner' : 'Member';
     final duplicate =
         lists.where((other) => other.name == list.name).length > 1;
-    final shortId = list.id.substring(
-      0,
-      list.id.length < 8 ? list.id.length : 8,
-    );
     return '$role · ${list.memberIds.length}/$maxListMembers members'
-        '${duplicate ? ' · $shortId' : ''}';
+        '${duplicate ? ' · ${shortId(list.id)}' : ''}';
   }
 
   @override

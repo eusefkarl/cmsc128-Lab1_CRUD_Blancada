@@ -13,6 +13,10 @@ abstract interface class CollaborationService {
   TaskRepository tasksFor(String? listId);
   Future<String> addMember(String listId, String memberUid);
   Future<void> removeMember(String listId, String memberUid);
+  Future<void> renameList(String listId, String name);
+
+  /// Display names by UID. Accounts with no name to show are left out.
+  Future<Map<String, String>> displayNames(List<String> uids);
 }
 
 class FirebaseCollaborationService implements CollaborationService {
@@ -117,6 +121,38 @@ class FirebaseCollaborationService implements CollaborationService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
+  }
+
+  @override
+  Future<void> renameList(String listId, String name) async {
+    _checkAccount();
+    final cleaned = name.trim();
+    if (!isValidListName(cleaned)) {
+      throw const FormatException(invalidListNameMessage);
+    }
+    final document = _firestore.collection('collaborativeLists').doc(listId);
+    await _firestore.runTransaction((transaction) async {
+      _ownedMembers(await transaction.get(document));
+      transaction.update(document, {
+        'name': cleaned,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  @override
+  Future<Map<String, String>> displayNames(List<String> uids) async {
+    _checkAccount();
+    final profiles = _firestore.collection('publicProfiles');
+    final documents = await Future.wait(
+      uids.map((memberUid) => profiles.doc(memberUid).get()),
+    );
+    return {
+      for (final document in documents)
+        if (document.data()?['displayName'] case final String name
+            when name.isNotEmpty)
+          document.id: name,
+    };
   }
 
   List<String> _ownedMembers(DocumentSnapshot<Map<String, dynamic>> snapshot) {

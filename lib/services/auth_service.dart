@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/limits.dart';
 import '../core/validation.dart';
 
 class AuthAccountSnapshot {
@@ -97,6 +98,7 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await _syncPublicProfile();
     return credential;
   }
 
@@ -173,17 +175,37 @@ class AuthService implements ProfileAuthService, PasswordRecoveryService {
         existingData?['uid'] != refreshedUser.uid ||
         existingData?['displayName'] != (refreshedUser.displayName ?? '') ||
         existingData?['email'] != currentEmail;
-    if (!needsSync) return _accountSnapshot(refreshedUser);
-
-    final data = <String, dynamic>{
-      'uid': refreshedUser.uid,
-      'displayName': refreshedUser.displayName ?? '',
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': existingData?['createdAt'] ?? FieldValue.serverTimestamp(),
-    };
-    if (currentEmail != null) data['email'] = currentEmail;
-    await profile.set(data);
+    if (needsSync) {
+      final data = <String, dynamic>{
+        'uid': refreshedUser.uid,
+        'displayName': refreshedUser.displayName ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': existingData?['createdAt'] ?? FieldValue.serverTimestamp(),
+      };
+      if (currentEmail != null) data['email'] = currentEmail;
+      await profile.set(data);
+    }
+    await _syncPublicProfile();
     return _accountSnapshot(refreshedUser);
+  }
+
+  /// Mirrors only the display name where other accounts can read it. Also
+  /// creates the document for accounts registered before it existed.
+  Future<void> _syncPublicProfile() async {
+    final user = currentUser;
+    if (user == null) return;
+    final profile = _firestore.collection('publicProfiles').doc(user.uid);
+    final existing = await profile.get();
+    // Read after the await: registration sets the name while a sync can run.
+    final latest = currentUser;
+    if (latest?.uid != user.uid) return;
+    final displayName = latest?.displayName ?? '';
+    final name = displayName.length > maxPublicNameLength
+        ? displayName.substring(0, maxPublicNameLength)
+        : displayName;
+    if (!existing.exists || existing.data()?['displayName'] != name) {
+      await profile.set({'displayName': name});
+    }
   }
 
   @override

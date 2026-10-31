@@ -27,7 +27,7 @@ service cloud.firestore {
           && request.auth.uid in resource.data.memberIds;
       }
 
-      // The 20-member cap matches maxListMembers in lib/core/limits.dart.
+      // The 20-member and 100-character name caps match lib/core/limits.dart.
       function validList(data) {
         return data.keys().hasAll(['ownerId', 'name', 'memberIds', 'createdAt', 'updatedAt'])
           && data.keys().hasOnly(['ownerId', 'name', 'memberIds', 'createdAt', 'updatedAt'])
@@ -93,6 +93,23 @@ service cloud.firestore {
 
       allow delete: if signedIn()
         && resource.data.ownerId == request.auth.uid;
+    }
+
+    // The display name other accounts can see, such as in a group's members.
+    // Separate from /users because rules cannot hide a document's email field.
+    match /publicProfiles/{userId} {
+      // The 256-character cap matches maxPublicNameLength in lib/core/limits.dart.
+      function validPublicProfile(data) {
+        return data.keys().hasOnly(['displayName'])
+          && data.displayName is string
+          && data.displayName.size() <= 256;
+      }
+
+      // Get only: reading a name requires already knowing the account's UID.
+      allow get: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && validPublicProfile(request.resource.data);
     }
 
     match /users/{userId} {
