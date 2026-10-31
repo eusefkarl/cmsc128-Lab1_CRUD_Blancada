@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'core/emulator_config.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
@@ -20,9 +22,15 @@ Future<void> main() async {
     runApp(StartupConfigurationError(message: error.message.toString()));
     return;
   }
-  await Firebase.initializeApp(options: options);
-  if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS')) {
+  const useEmulators = bool.fromEnvironment('USE_FIREBASE_EMULATORS');
+  await Firebase.initializeApp(
+    options: useEmulators ? emulatorFirebaseOptions(options) : options,
+  );
+  if (useEmulators) {
     await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
+    // A saved session would be restored before the next launch connects the
+    // emulator, leaving Auth on production. See emulatorFirebaseOptions.
+    if (kIsWeb) await FirebaseAuth.instance.setPersistence(Persistence.NONE);
     FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
   }
   runApp(const MyApp());
