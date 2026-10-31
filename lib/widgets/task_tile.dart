@@ -21,7 +21,8 @@ class TaskTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priorityColor = _priorityColor(task.priority);
-    final details = _taskDetails(context, priorityColor);
+    final overdue = task.isOverdueAt(DateTime.now());
+    final details = _taskDetails(context, priorityColor, overdue);
     final actions = Wrap(
       spacing: 4,
       children: [
@@ -45,7 +46,11 @@ class TaskTile extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: task.isDone ? AppColors.cyan : priorityColor,
+              color: task.isDone
+                  ? AppColors.cyan
+                  : overdue
+                  ? AppColors.highPriority
+                  : priorityColor,
               width: 3,
             ),
           ),
@@ -96,7 +101,11 @@ class TaskTile extends StatelessWidget {
     );
   }
 
-  Widget _taskDetails(BuildContext context, Color priorityColor) => Column(
+  Widget _taskDetails(
+    BuildContext context,
+    Color priorityColor,
+    bool overdue,
+  ) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const SizedBox(height: 8),
@@ -120,6 +129,12 @@ class TaskTile extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
+          if (overdue)
+            const _Badge(
+              label: 'Overdue',
+              color: AppColors.highPriority,
+              icon: Icons.warning_amber_outlined,
+            ),
           _Badge(
             label: task.priority.label,
             color: priorityColor,

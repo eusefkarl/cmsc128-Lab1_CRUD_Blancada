@@ -30,6 +30,18 @@ class Task {
   TaskCategory category;
   bool isDone;
 
+  /// A date with no time stays on time until that day ends. A time with no
+  /// date, or a completed task, is never overdue.
+  bool isOverdueAt(DateTime now) {
+    final date = dueDate;
+    if (isDone || date == null) return false;
+    final time = dueTime;
+    final deadline = time == null
+        ? DateTime(date.year, date.month, date.day + 1)
+        : DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return !now.isBefore(deadline);
+  }
+
   factory Task.fromFirestore(DocumentSnapshot<Map<String, dynamic>> document) {
     final data = document.data() ?? <String, dynamic>{};
     final dueDate = data['dueDate'];
