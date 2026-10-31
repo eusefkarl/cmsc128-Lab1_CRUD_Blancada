@@ -239,6 +239,62 @@ void main() {
     expect(schoolOffset.dy, lessThan(othersOffset.dy));
   });
 
+  testWidgets('filter controls fit a narrow display at large text', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            size: const Size(320, 760),
+            textScaler: const TextScaler.linear(2),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: TaskHomePage(repository: FakeTaskRepository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(DropdownButton<String>), findsNWidgets(2));
+
+    // A control that had to shrink still opens and selects.
+    final sort = find.byType(DropdownButton<TaskSortOption>);
+    await tester.ensureVisible(sort);
+    await tester.pumpAndSettle();
+    await tester.tap(sort);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sort: Category').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DropdownButton<TaskSortOption>>(sort).value,
+      TaskSortOption.tag,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('filter controls keep their natural width on a wide display', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: TaskHomePage(repository: FakeTaskRepository())),
+    );
+    await tester.pumpAndSettle();
+
+    final sort = find.byType(DropdownButton<TaskSortOption>);
+    final filters = find.byType(DropdownButton<String>);
+    expect(tester.getSize(sort).width, lessThan(400));
+    expect(tester.getTopLeft(filters.first).dy, tester.getTopLeft(sort).dy);
+    expect(tester.getTopLeft(filters.last).dy, tester.getTopLeft(sort).dy);
+  });
+
   testWidgets('reflows the dashboard and task form on a narrow display', (
     WidgetTester tester,
   ) async {

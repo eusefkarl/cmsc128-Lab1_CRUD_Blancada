@@ -139,6 +139,7 @@ test('personal UBAC and collaborative membership rules', { timeout: 180000 }, as
     await ok(read(aList, b));
     await ok(rest('POST', ':runQuery', b, query('collaborativeLists', filter('memberIds', 'ARRAY_CONTAINS', b.uid))));
     await denied(updateList(aList, b, { memberIds: [a.uid, b.uid, c.uid] }));
+    await denied(updateList(aList, b, { memberIds: [a.uid] }));
     await denied(updateList(aList, b, { name: 'Hijacked' }));
     await denied(read(aList, c));
     await ok(updateList(aList, a, { memberIds: [a.uid] }));

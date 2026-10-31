@@ -68,6 +68,8 @@ class FakeCollaboration implements CollaborationService {
   @override
   final String uid;
   final membersAdded = <String>[];
+  final membersRemoved = <String>[];
+  Object? removeError;
   final lists = StreamController<List<CollaborativeList>>.broadcast();
   final scopes = <String, ScopeTasks>{};
   bool initialized = false;
@@ -85,6 +87,12 @@ class FakeCollaboration implements CollaborationService {
   Future<String> addMember(String listId, String memberUid) async {
     membersAdded.add('$listId:$memberUid');
     return 'added';
+  }
+
+  @override
+  Future<void> removeMember(String listId, String memberUid) async {
+    if (removeError != null) throw removeError!;
+    membersRemoved.add('$listId:$memberUid');
   }
 
   List<CollaborativeList> get groups => [
@@ -141,7 +149,7 @@ void main() {
       expect(find.text('a-personal'), findsNothing);
       expect(find.text('a-joined'), findsOneWidget);
       expect(service.scopes['personal']!.cancelled, isTrue);
-      expect(find.text('Add member'), findsNothing);
+      expect(find.text('Manage members'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -176,7 +184,7 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Own group'));
     await tester.pumpAndSettle();
     expect(find.text('a-a'), findsOneWidget);
-    expect(find.text('Add member'), findsOneWidget);
+    expect(find.text('Manage members'), findsOneWidget);
 
     await tester.tap(find.text('All groups'));
     await tester.pumpAndSettle();
@@ -371,7 +379,9 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Own group'));
     await tester.pumpAndSettle();
     expect(find.text('All groups'), findsOneWidget);
-    expect(find.text('Add member'), findsOneWidget);
+    await tester.tap(find.text('Manage members'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -559,16 +569,197 @@ void main() {
     service.lists.add(service.groups);
     await tester.pumpAndSettle();
     await openGroup(tester, 'Own group');
-    await tester.tap(find.text('Add member'));
+    await tester.tap(find.text('Manage members'));
     await tester.pumpAndSettle();
+    expect(find.text('Current members (1/20)'), findsOneWidget);
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Account UID'),
-      'member-uid',
+      '  member-uid ',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Add member'));
     await tester.pumpAndSettle();
     expect(service.membersAdded, ['a:member-uid']);
     expect(find.text('Member added.'), findsOneWidget);
+    expect(find.text('Current members (2/20)'), findsOneWidget);
+    expect(find.byTooltip('Remove member'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('member removal', () {
+    Future<FakeCollaboration> openMembers(WidgetTester tester) async {
+      final service = FakeCollaboration('a');
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(home: CollaborativeWorkspace(service: service)),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add(const [
+        CollaborativeList(
+          id: 'a',
+          ownerId: 'a',
+          name: 'Own group',
+          memberIds: ['a', 'typo-uid'],
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      await openGroup(tester, 'Own group');
+      await tester.tap(find.text('Manage members'));
+      await tester.pumpAndSettle();
+      return service;
+    }
+
+    testWidgets('owners can remove a mistyped UID after confirming', (
+      tester,
+    ) async {
+      final service = await openMembers(tester);
+      expect(find.text('a (owner)'), findsOneWidget);
+      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('Current members (2/20)'), findsOneWidget);
+      // Only the other member's row can be removed, never the owner's.
+      expect(find.byTooltip('Remove member'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Remove member'));
+      await tester.pumpAndSettle();
+      expect(find.text('They lose access right away.'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(service.membersRemoved, isEmpty);
+      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('They lose access right away.'), findsNothing);
+
+      await tester.tap(find.byTooltip('Remove member'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+      await tester.pumpAndSettle();
+      expect(service.membersRemoved, ['a:typo-uid']);
+      expect(find.text('typo-uid'), findsNothing);
+      expect(find.text('Member removed.'), findsOneWidget);
+      expect(find.text('Current members (1/20)'), findsOneWidget);
+      expect(find.byTooltip('Remove member'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a failed removal keeps the member and shows the reason', (
+      tester,
+    ) async {
+      final service = await openMembers(tester);
+      service.removeError = StateError('Removal rejected.');
+      await tester.tap(find.byTooltip('Remove member'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+      await tester.pumpAndSettle();
+      expect(service.membersRemoved, isEmpty);
+      expect(find.text('Removal rejected.'), findsOneWidget);
+      expect(find.text('Member removed.'), findsNothing);
+      expect(find.text('typo-uid'), findsOneWidget);
+      expect(find.text('Current members (2/20)'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a full group scrolls in a narrow dialog at large text', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 760));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = FakeCollaboration('a');
+      addTearDown(service.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              size: const Size(320, 760),
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: CollaborativeWorkspace(service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      service.lists.add([
+        CollaborativeList(
+          id: 'a',
+          ownerId: 'a',
+          name: 'Own group',
+          memberIds: [
+            'a',
+            for (var i = 1; i < 20; i++) 'member-account-uid-$i',
+          ],
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      await selectTab(tester, 'Groups');
+      final card = find.widgetWithText(ListTile, 'Own group');
+      await tester.scrollUntilVisible(
+        card,
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Manage members'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // The last member is reachable and the result stays visible after it.
+      final last = find.text('member-account-uid-19');
+      await tester.dragUntilVisible(
+        last,
+        find.byType(SingleChildScrollView),
+        const Offset(0, -200),
+      );
+      final row = find.ancestor(of: last, matching: find.byType(Row)).first;
+      await tester.tap(
+        find.descendant(of: row, matching: find.byTooltip('Remove member')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.widgetWithText(TextButton, 'Remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+      await tester.pumpAndSettle();
+      expect(service.membersRemoved, ['a:member-account-uid-19']);
+      expect(find.text('Member removed.').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('starting a removal clears the previous result', (
+      tester,
+    ) async {
+      await openMembers(tester);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Account UID'),
+        'another-uid',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add member'));
+      await tester.pumpAndSettle();
+      expect(find.text('Member added.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove member').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Member added.'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('losing the group closes the dialog mid-confirmation', (
+      tester,
+    ) async {
+      final service = await openMembers(tester);
+      await tester.tap(find.byTooltip('Remove member'));
+      await tester.pumpAndSettle();
+      service.lists.addError(StateError('offline'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('They lose access right away.'), findsNothing);
+      expect(service.membersRemoved, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }

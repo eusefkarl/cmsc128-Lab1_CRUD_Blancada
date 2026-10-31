@@ -49,6 +49,28 @@ void main() {
     expect(service.account.email, 'player@example.test');
   });
 
+  testWidgets('profile button follows display name changes after sign-in', (
+    tester,
+  ) async {
+    final names = StreamController<String?>();
+    addTearDown(names.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(actions: [ProfileButton(displayNames: names.stream)]),
+        ),
+      ),
+    );
+    expect(find.text('?'), findsOneWidget);
+    names.add('morgan');
+    await tester.pumpAndSettle();
+    expect(find.text('M'), findsOneWidget);
+    names.add('Zed');
+    await tester.pumpAndSettle();
+    expect(find.text('Z'), findsOneWidget);
+    expect(find.text('M'), findsNothing);
+  });
+
   testWidgets('account details show the UID used for invitations', (
     tester,
   ) async {
