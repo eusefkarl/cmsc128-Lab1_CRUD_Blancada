@@ -27,11 +27,11 @@ Future<void> main() async {
     options: useEmulators ? emulatorFirebaseOptions(options) : options,
   );
   if (useEmulators) {
-    await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
+    await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
     // A saved session would be restored before the next launch connects the
     // emulator, leaving Auth on production. See emulatorFirebaseOptions.
     if (kIsWeb) await FirebaseAuth.instance.setPersistence(Persistence.NONE);
-    FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
+    FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080);
   }
   runApp(const MyApp());
 }

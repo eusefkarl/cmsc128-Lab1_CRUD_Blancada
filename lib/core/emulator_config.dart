@@ -1,7 +1,15 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 /// Stands in for the real API key in builds that use the local emulators.
 const String emulatorApiKey = 'emulator-only-placeholder-key';
+
+/// Where this build reaches the local emulators. An Android emulator sees its
+/// host computer at 10.0.2.2, because 127.0.0.1 is the emulator itself.
+String get emulatorHost =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+    ? '10.0.2.2'
+    : '127.0.0.1';
 
 /// Options for a build that uses the local emulators.
 ///

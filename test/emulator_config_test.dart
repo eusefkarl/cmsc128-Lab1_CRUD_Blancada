@@ -1,5 +1,6 @@
 import 'package:do_it_now/core/emulator_config.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,5 +23,15 @@ void main() {
     expect(options.projectId, real.projectId);
     expect(options.appId, real.appId);
     expect(options.authDomain, real.authDomain);
+  });
+
+  test('an Android emulator reaches the host computer at its own address', () {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(emulatorHost, '10.0.2.2');
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    expect(emulatorHost, '127.0.0.1');
   });
 }
