@@ -12,9 +12,57 @@ A Flutter task-management app with a game HUD-inspired interface. Tasks support 
 
 Firestore was chosen instead of an in-memory list because tasks must survive browser refreshes and app restarts. Its realtime stream keeps the task list synchronized after create, edit, completion, and delete operations. Authentication and `ownerId` prevent users from accessing another user's tasks.
 
+The backend is Firebase, with no custom server: Firebase Authentication handles accounts and Cloud Firestore is the database. Firestore security rules (`firestore.rules`) enforce access control on the server side.
+
+## Refactoring and Optimization
+
+**Code**
+
+- Code is separated by concern: data access in `lib/services`, data shapes in `lib/models`, and the UI in `lib/screens` and `lib/widgets`. Screens catch Firebase error types to show readable messages, and the profile avatar reads the signed-in user's name from Firebase Authentication directly.
+- Shared validation, limits, and UI helpers moved into `lib/core` and reusable widgets, so each rule is defined once instead of being repeated per screen.
+- Removed the unused Cloud Functions directory and the unused `google_fonts` dependency.
+
+**Backend**
+
+- Group membership changed from Cloud Functions to direct Firestore writes checked by rules. This removes a service to deploy and keeps the project on the free Spark plan.
+- Tasks and lists store user IDs, not copies of names or emails. The one duplicated value is `displayName`, kept in both `users` and `publicProfiles` because rules cannot hide the email field in `users` from other accounts.
+- XP and levels are calculated from current tasks instead of being stored, so there is no second copy that can fall out of sync.
+- A group's list comes from one `arrayContains` query on `memberIds`, and tasks use realtime streams instead of repeated fetches.
+- Task creator names are de-duplicated and each one is requested once. They use one read per account, run in parallel, because rules deliberately block listing `publicProfiles`.
+- Ownership and membership rules were kept through the refactor, and the emulator test suite checks them (see [Testing](#testing)).
+
+**UX/UI**
+
+- Consistent System-window styling across screens, with loading, success, and error feedback on actions.
+- Raw error details are kept out of the UI, and layouts were fixed for narrow displays.
+- Added overdue flags, **Clear filters**, Enter to submit, and a confirmation before discarding edits.
+
+## Accessing the App
+
+### Android APK
+
+1. Download the APK from Google Drive: **GOOGLE_DRIVE_LINK**
+2. Open it on an Android phone and allow **Install from unknown sources** when asked. Play Protect may warn about an unknown app.
+3. Open **DO IT NOW!** and register or sign in.
+
+To build the APK yourself, run `flutter build apk --release --dart-define-from-file=.env`. The file is written to `build/app/outputs/flutter-apk/app-release.apk`.
+
+### Web build over Wi-Fi
+
+This only works while the host computer is on and serving the build, and the phone must be on the same Wi-Fi network.
+
+```powershell
+flutter build web --dart-define-from-file=.env
+python -m http.server 8090 --directory build/web
+```
+
+Find the computer's IPv4 address with `ipconfig`, then open `http://<that-address>:8090` in the phone's browser. If the page does not load, allow Python through Windows Firewall, and check that the network does not block devices from reaching each other. Port 8090 is used because the Firestore emulator uses 8080.
+
+Sign in with email and password on this address. Google sign-in only works on domains authorized in Firebase, and this is a plain IP address.
+
 ## Firebase Setup
 
-The project is configured for the Firebase project in `lib/firebase_options.dart` and currently supports Web, Windows, and macOS. The platform client API keys are supplied at build time from a local, ignored `.env` file.
+The project is configured for the Firebase project in `lib/firebase_options.dart` and currently supports Android, Web, Windows, and macOS. The platform client API keys are supplied at build time from a local, ignored `.env` file. Android reads its options from the same file, so it does not use `google-services.json`.
 
 Before running the app:
 
@@ -39,19 +87,21 @@ The rules file is intentionally committed. Firestore rules are access-control co
 
 - Flutter SDK compatible with Dart `^3.13.2`
 - A configured Firebase project
-- Chrome for Web, or a supported desktop Flutter platform
+- Chrome for Web, a supported desktop Flutter platform, or the Android SDK and an Android phone with USB debugging on
 - Node.js and the Firebase CLI for deploying rules or running the local emulators
 
 From the project directory:
 
 ```powershell
 Copy-Item .env.example .env
-# Fill the three FIREBASE_*_API_KEY values in .env from Firebase Console.
+# Fill the four FIREBASE_*_API_KEY values in .env. See the note below.
 flutter pub get
 flutter analyze
 flutter test
 flutter run -d chrome --dart-define-from-file=.env
 ```
+
+The keys come from the Firebase Console, which requires access to the project. Without access, use the `.env` file shared privately by the project owner; it is never committed.
 
 The `.env` file is ignored by Git and is not a Flutter asset. Flutter reads it only when `--dart-define-from-file=.env` is passed. Use the same flag for `flutter build` and supported-platform integration tests, for example `flutter build web --dart-define-from-file=.env`. The app reports a configuration error if a platform key is missing or still contains the template placeholder. Firebase web client keys are still present in compiled web output; keep service-account keys and other server secrets out of the app entirely. If you regenerate `lib/firebase_options.dart` with FlutterFire CLI, restore its environment-variable API-key bindings before committing.
 
@@ -60,6 +110,15 @@ For Windows desktop:
 ```powershell
 flutter run -d windows --dart-define-from-file=.env
 ```
+
+For an Android phone over USB, turn on USB debugging, then use the device ID that `flutter devices` lists:
+
+```powershell
+flutter devices
+flutter run -d <device-id> --dart-define-from-file=.env
+```
+
+Do not use `USE_FIREBASE_EMULATORS=true` on a physical phone. That build connects to `10.0.2.2`, which only reaches the host computer from an Android emulator.
 
 The app uses Firebase Authentication for login and stores the current UID, email, and display name in the owner's `users/{uid}` Firestore profile document. Firebase Authentication is authoritative for account credentials and profile identity; Firestore mirrors the active values for app data. Passwords are never written to Firestore.
 
@@ -120,7 +179,29 @@ isDone    boolean      completion state
 
 ## CRUD Data Operations
 
-The app uses `FirestoreTaskRepository` in `lib/services/task_repository.dart` rather than REST endpoints.
+The app uses `FirestoreTaskRepository` in `lib/services/task_repository.dart` through the Firestore SDK rather than a custom REST API.
+
+### Example API endpoints
+
+The same data is reachable through Firestore's REST API, and the same security rules apply. Send a signed-in user's Firebase ID token as `Authorization: Bearer <ID_TOKEN>`. Paths are relative to:
+
+```text
+https://firestore.googleapis.com/v1/projects/doitnow-c26f9/databases/(default)/documents
+```
+
+| Operation | Method and path | Who is allowed |
+| --- | --- | --- |
+| List your personal tasks | `POST :runQuery`, filtered on `ownerId` equal to your UID | Signed-in owner |
+| Read a personal task | `GET /tasks/{taskId}` | Owner |
+| Create a personal task | `POST /tasks` | Signed-in user, with `ownerId` set to their UID |
+| Update a personal task | `PATCH /tasks/{taskId}` | Owner |
+| Delete a personal task | `DELETE /tasks/{taskId}` | Owner |
+| Read a group | `GET /collaborativeLists/{listId}` | Current member |
+| List a group's tasks | `GET /collaborativeLists/{listId}/tasks` | Current member |
+| Create a group task | `POST /collaborativeLists/{listId}/tasks` | Current member |
+| Read a display name | `GET /publicProfiles/{uid}` | Any signed-in user |
+
+Requests from anyone else are rejected with `403 PERMISSION_DENIED`. The sections below show how the app performs the same operations.
 
 ### Read tasks in real time
 
@@ -216,13 +297,13 @@ firebase emulators:exec --only auth,firestore --project doitnow-c26f9 "node --te
 
 These checks create throwaway accounts in the local Authentication emulator, read one-time email action codes from its local endpoint, and verify changes against Authentication and the local Firestore rules. They do not use real accounts or production data. The Flutter `integration_test` suite is also available for native targets using `flutter test integration_test/account_compliance_test.dart -d windows --dart-define-from-file=.env` while the emulators run; Flutter's integration runner does not support Chrome.
 
-## Activity 3: User-Based Access Control and Collaborative Lists
+## User-Based Access Control and Collaborative Lists
 
-Activity 3 keeps personal tasks private and adds small collaborative lists. Firebase Authentication supplies the identity used by Firestore rules. A user's UID, rather than an email address, is the stable ownership and membership key.
+Personal tasks are private to their owner, and small collaborative lists let accounts share tasks. Firebase Authentication supplies the identity used by Firestore rules. A user's UID, rather than an email address, is the stable ownership and membership key.
 
 ### Firestore schema
 
-The existing `users/{uid}` and personal `tasks/{taskId}` collections remain in use. Personal task documents keep the fields listed above; `ownerId` must equal the signed-in UID. Collaborative data uses this structure:
+Account profiles live in `users/{uid}` and personal tasks in `tasks/{taskId}`, which use the fields listed under Data Model; `ownerId` must equal the signed-in UID. Collaborative data uses this structure:
 
 ```text
 collaborativeLists/{listId}
@@ -247,7 +328,7 @@ publicProfiles/{uid}
   displayName   string       name other accounts can see; maximum 256 characters
 ```
 
-Each account has a deterministic default collaborative list whose ID is the account's UID, named "My group" until its owner renames it. Initialization is idempotent and must not overwrite an existing list. An account can create more lists, each with the ID `<20 random letters and digits>_<owner UID>`. Rules accept only these two forms, so no account can claim the ID of another account's default list. Lists cannot be deleted. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. `publicProfiles/{uid}` holds only the display name, kept apart from `users/{uid}` because rules cannot hide that document's email field. The app writes it on registration and on each profile sync, which also creates it for existing accounts the next time they open the app. Shared task `ownerId` records its creator and cannot be changed. A removed member, or one who leaves, loses access because rules check current membership on each request. Tasks they created stay in the list.
+Each account has a deterministic default collaborative list whose ID is the account's UID, named "My group" until its owner renames it. Initialization is idempotent and never overwrites an existing list. An account can create more lists, each with the ID `<20 random letters and digits>_<owner UID>`. Rules accept only these two forms, so no account can claim the ID of another account's default list. Lists cannot be deleted. `memberIds` stores UIDs only; profile names and email addresses are not copied into list or task documents. `publicProfiles/{uid}` holds only the display name, kept apart from `users/{uid}` because rules cannot hide that document's email field. The app writes it on registration and on each profile sync, which also creates it for existing accounts the next time they open the app. Shared task `ownerId` records its creator and cannot be changed. A removed member, or one who leaves, loses access because rules check current membership on each request. Tasks they created stay in the list.
 
 ### Access matrix
 
@@ -286,7 +367,7 @@ flutter test
 flutter build web --dart-define-from-file=.env
 ```
 
-The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, owner-only UID membership changes, duplicate and capacity limits, and access revocation. Widget tests exercise tab and group switching, UID invitations, and account/form cleanup. These checks do not replace a deployed two-account demonstration or a browser refresh check.
+The UBAC suite uses synthetic emulator accounts and direct requests to check personal-task isolation, shared-task permissions, owner-only UID membership changes, duplicate and capacity limits, and access revocation. Widget tests exercise tab and group switching, UID invitations, and account/form cleanup. They do not cover a deployed two-account session or a browser refresh, so those are checked by hand.
 
 To check backend restart persistence independently, use a fresh export directory containing only synthetic data:
 
@@ -306,10 +387,10 @@ firebase deploy --only firestore:rules --project doitnow-c26f9
 flutter build web --dart-define-from-file=.env
 ```
 
-Host the built web app on Firebase Hosting or another static host. Do not run `firebase deploy --only functions`; there is no Functions source or configuration left in this project. The trade-off is that there is no email-to-UID lookup, so each person must share the UID shown on their **Groups** tab with the group owner before being added.
+Host the built web app on Firebase Hosting or another static host. This project has no Cloud Functions, so `firebase deploy --only functions` does not apply. The trade-off is that there is no email-to-UID lookup, so each person must share the UID shown on their **Groups** tab with the group owner before being added.
 
 ### Demo and repository history
 
-Prepare two accounts by registering through the app. Add three to five personal tasks to each account. Sign in as the second account, copy the UID from the **Groups** tab, then sign in as the first account, open its group on the **Groups** tab, and add that UID under **Manage members**. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. A useful demonstration also shows that a non-member cannot read the shared list by using a guessed document ID.
+To demonstrate access control, register two accounts through the app. Add three to five personal tasks to each account. Sign in as the second account, copy the UID from the **Groups** tab, then sign in as the first account, open its group on the **Groups** tab, and add that UID under **Manage members**. Show the app with each account signed in and use Firebase Console or the emulator UI as the database viewer to show the separate personal task owners, the shared list's `memberIds`, and its nested tasks. Keep passwords out of this repository and screenshots. Finish by showing that a non-member cannot read the shared list by using a guessed document ID.
 
-The Activity 3 working branch is `act3-ubac`, created from `main` at `45b1e7d`. The authentication work was already present in the branch's history: merging `auth` reported that it was already up to date, so this activity did not create another auth merge or produce merge conflicts. The repository also contains the earlier historical merge commit `6f65f96` (`Merge PR #1 dev`). This records the history observed for this activity; it does not claim a new pull request or merge.
+Access control and collaborative lists were built on the `act3-ubac` branch, created from `main` at `45b1e7d`. The authentication work was already in that branch's history, so merging `auth` changed nothing and caused no conflicts. The earlier merge of the `dev` branch is commit `6f65f96` (`Merge PR #1 dev`). The refactoring, XP and levels, and Android support were built on the `act4-refactor` branch and fast-forwarded into `main`.
